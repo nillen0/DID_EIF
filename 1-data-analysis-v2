@@ -1,0 +1,1038 @@
+#==============================================================================#
+# Nick Illenberger
+# June 5, 2023
+#
+# Difference-in-difference data analysis
+#   1. Setup
+#       - Read in data and prepare for analysis
+#   2. Analysis
+#       - Descriptive Characteristics
+#       - Fit nuisance functions
+#   3. Reporting
+#
+# Our goal in this analysis is to estimate the effects of minimum wage increases
+# on self-reported health. Specifically, we ask the question, what would
+# self-reported health outcomes look like if every US state had had a minimum
+# wage at least as high as NYS minimum wage
+#
+# Outcome of interest: 
+#   -Self-rated health for individual, i, in state, s, at time, t
+# Exposure:
+#   - Lagged, state-level minimum wage
+# Covariates:
+#   - State-level: maximum temporary assistance for needy families, maximum SNAP,
+#       state earned income tax credit, unemployment rate, average hourly wage,
+#       per-capita personal income
+#   - Individual-level: age, race, educational attainment
+#
+# References:
+#   The effects of recent minimum wage increases on self-reported health in the
+#     United States
+#==============================================================================#
+
+# Set working directory:
+setwd("/Users/illenn01/Library/CloudStorage/OneDrive-NYULangoneHealth/DID")
+
+# Required Packages:
+library(SuperLearner)
+library(tidyverse)
+library(tidycensus)
+library(readxl)
+library(gghighlight)
+
+
+# Required Functions:
+sl= function(df, y, s, learners, v, ...) {
+  SuperLearner(Y = y[df$split != s],
+               X = df %>% filter(split != s) %>% select(...),
+               newX = df %>% select(...) %>% mutate(across(starts_with('exposure_'), ~ 1)),
+               SL.library = learners,
+               cvControl = list(V = v))$SL.predict[,1]
+}
+
+repair_g = function(df) mutate(df, 
+                               g2020 = exposure_2020*g2020*g2019*g2018*g2017*g2016*g2015*g2014 +
+                                 (1-exposure_2020)*(1-g2020)*(1-g2019)*(1-g2018)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
+                               g2019 = exposure_2019*g2019*g2018*g2017*g2016*g2015*g2014 +
+                                 (1-exposure_2019)*(1-g2019)*(1-g2018)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
+                               g2018 = exposure_2018*g2018*g2017*g2016*g2015*g2014 +
+                                 (1-exposure_2018)*(1-g2018)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
+                               g2017 = exposure_2017*g2017*g2016*g2015*g2014 +
+                                 (1-exposure_2017)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
+                               g2016 = exposure_2016*g2016*g2015*g2014 +
+                                 (1-exposure_2016)*(1-g2016)*(1-g2015)*(1-g2014),
+                               g2015 = exposure_2015*g2015*g2014 +
+                                 (1-exposure_2015)*(1-g2015)*(1-g2014),
+                               g2014 = exposure_2014*g2014 +
+                                 (1-exposure_2014)*(1-g2014))
+
+calc_if = function(df) {
+  df %>% mutate(
+    phi11 = ( 1*(a1==0)/g1 )*(y1 - Q11t)     + Q10t,
+    phi10 = ( 1*(a1==0)/g1 )*(y0 - Q11tmin1) + Q10tmin1,
+    phi22 = ( 1*(a2==0)/g2 )*(y2 - Q22t)     + (1*(a1==0)/g1)*(Q22t - Q21t)         + Q20t,
+    phi21 = ( 1*(a2==0)/g2 )*(y1 - Q22tmin1) + (1*(a1==0)/g1)*(Q22tmin1 - Q21tmin1) + Q20tmin1,
+    psi1 =  y0 + phi11 - phi10,
+    psi2  = y0 + phi11 - phi10 + phi22 - phi21
+  )
+}
+calc_if = function(df) {
+  df %>% mutate(
+    
+    # EIF for Phi_jk
+    phi_2020_2020 = ( 1*(exposure_2020==1)/g2020 )*(genhlth_bin_2020 - Q_2020_2020_t)     +
+      (1*(exposure_2019==1)/g2019)*(Q_2020_2020_t - Q_2020_2019_t) +
+      (1*(exposure_2018==1)/g2018)*(Q_2020_2019_t - Q_2020_2018_t) +
+      (1*(exposure_2017==1)/g2017)*(Q_2020_2018_t - Q_2020_2017_t) +
+      (1*(exposure_2016==1)/g2016)*(Q_2020_2017_t - Q_2020_2016_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2020_2016_t - Q_2020_2015_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2020_2015_t - Q_2020_2014_t) +
+      Q_2020_2013_t,
+    phi_2020_2019 = ( 1*(exposure_2020==1)/g2020)*(genhlth_bin_2019 - Q_2020_2020_min_t)     +
+      (1*(exposure_2019==1)/g2019)*(Q_2020_2020_min_t - Q_2020_2019_min_t) +
+      (1*(exposure_2018==1)/g2018)*(Q_2020_2019_min_t - Q_2020_2018_min_t) +
+      (1*(exposure_2017==1)/g2017)*(Q_2020_2018_min_t - Q_2020_2017_min_t) +
+      (1*(exposure_2016==1)/g2016)*(Q_2020_2017_min_t - Q_2020_2016_min_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2020_2016_min_t - Q_2020_2015_min_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2020_2015_min_t - Q_2020_2014_min_t) +
+      Q_2020_2013_min_t,
+    
+    phi_2019_2019 = ( 1*(exposure_2019==1)/g2019 )*(genhlth_bin_2019 - Q_2019_2019_t)     +
+      (1*(exposure_2018==1)/g2018)*(Q_2019_2019_t - Q_2019_2018_t) +
+      (1*(exposure_2017==1)/g2017)*(Q_2019_2018_t - Q_2019_2017_t) +
+      (1*(exposure_2016==1)/g2016)*(Q_2019_2017_t - Q_2019_2016_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2019_2016_t - Q_2019_2015_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2019_2015_t - Q_2019_2014_t) +
+      Q_2019_2013_t,
+    phi_2019_2018 = ( 1*(exposure_2019==1)/g2019 )*(genhlth_bin_2018 - Q_2019_2019_min_t)     +
+      (1*(exposure_2018==1)/g2018)*(Q_2019_2019_min_t - Q_2019_2018_min_t) +
+      (1*(exposure_2017==1)/g2017)*(Q_2019_2018_min_t - Q_2019_2017_min_t) +
+      (1*(exposure_2016==1)/g2016)*(Q_2019_2017_min_t - Q_2019_2016_min_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2019_2016_min_t - Q_2019_2015_min_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2019_2015_min_t - Q_2019_2014_min_t) +
+      Q_2018_2013_min_t,
+    
+    phi_2018_2018 = ( 1*(exposure_2018==1)/g2018 )*(genhlth_bin_2018 - Q_2018_2018_t)     +
+      (1*(exposure_2017==1)/g2017)*(Q_2018_2018_t - Q_2018_2017_t) +
+      (1*(exposure_2016==1)/g2016)*(Q_2018_2017_t - Q_2018_2016_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2018_2016_t - Q_2018_2015_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2018_2015_t - Q_2018_2014_t) +
+      Q_2018_2013_t,
+    phi_2018_2017 = ( 1*(exposure_2018==1)/g2018 )*(genhlth_bin_2017 - Q_2018_2018_min_t)     +
+      (1*(exposure_2017==1)/g2017)*(Q_2018_2018_min_t - Q_2018_2017_min_t) +
+      (1*(exposure_2016==1)/g2016)*(Q_2018_2017_min_t - Q_2018_2016_min_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2018_2016_min_t - Q_2018_2015_min_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2018_2015_min_t - Q_2018_2014_min_t) +
+      Q_2018_2013_min_t,
+    
+    
+    phi_2017_2017 = ( 1*(exposure_2017==1)/g2017 )*(genhlth_bin_2017 - Q_2017_2017_t)     +
+      (1*(exposure_2016==1)/g2016)*(Q_2017_2017_t - Q_2017_2016_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2017_2016_t - Q_2017_2015_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2017_2015_t - Q_2017_2014_t) +
+      Q_2017_2013_t,
+    phi_2017_2016 = ( 1*(exposure_2017==1)/g2017 )*(genhlth_bin_2016 - Q_2017_2017_min_t)     +
+      (1*(exposure_2016==1)/g2016)*(Q_2017_2017_min_t - Q_2017_2016_min_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2017_2016_min_t - Q_2017_2015_min_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2017_2015_min_t - Q_2017_2014_min_t) +
+      Q_2017_2013_min_t,
+    
+    phi_2016_2016 = ( 1*(exposure_2016==1)/g2016 )*(genhlth_bin_2016 - Q_2016_2016_t)     +
+      (1*(exposure_2015==1)/g2015)*(Q_2016_2016_t - Q_2016_2015_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2016_2015_t - Q_2016_2014_t) +
+      Q_2016_2013_t,
+    phi_2016_2015 = ( 1*(exposure_2016==1)/g2016 )*(genhlth_bin_2015 - Q_2016_2016_min_t) +
+      (1*(exposure_2015==1)/g2015)*(Q_2016_2016_min_t - Q_2016_2015_min_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2016_2015_min_t - Q_2016_2014_min_t) +
+      Q_2016_2013_min_t,
+    
+    phi_2015_2015 = ( 1*(exposure_2015==1)/g2015 )*(genhlth_bin_2015 - Q_2015_2015_t)     +
+      (1*(exposure_2014==1)/g2014)*(Q_2015_2015_t - Q_2015_2014_t) +
+      Q_2015_2013_t,
+    phi_2015_2014 = ( 1*(exposure_2015==1)/g2015 )*(genhlth_bin_2014 - Q_2015_2015_min_t) +
+      (1*(exposure_2014==1)/g2014)*(Q_2015_2015_min_t - Q_2015_2014_min_t) +
+      Q_2015_2013_min_t,
+    
+    phi_2014_2014 = ( 1*(exposure_2014==1)/g2014 )*(genhlth_bin_2014 - Q_2014_2014_t) +
+      Q_2014_2013_t,
+    phi_2014_2013 = ( 1*(exposure_2014==1)/g2014 )*(genhlth_bin_2013 - Q_2014_2014_min_t) +
+      Q_2014_2013_min_t,
+    
+    # EIF for ATE:
+    psi2014 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013,
+    psi2015 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013 +
+      phi_2015_2015 - phi_2015_2014,
+    psi2016 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013 +
+      phi_2015_2015 - phi_2015_2014 +
+      phi_2016_2016 - phi_2016_2015,
+    psi2017 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013 +
+      phi_2015_2015 - phi_2015_2014 +
+      phi_2016_2016 - phi_2016_2015 +
+      phi_2017_2017 - phi_2017_2016,
+    psi2018 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013 +
+      phi_2015_2015 - phi_2015_2014 +
+      phi_2016_2016 - phi_2016_2015 +
+      phi_2017_2017 - phi_2017_2016 +
+      phi_2018_2018 - phi_2018_2017,
+    psi2019 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013 +
+      phi_2015_2015 - phi_2015_2014 +
+      phi_2016_2016 - phi_2016_2015 +
+      phi_2017_2017 - phi_2017_2016 +
+      phi_2018_2018 - phi_2018_2017 +
+      phi_2019_2019 - phi_2019_2018,
+    psi2020 = genhlth_bin_2013 +
+      phi_2014_2014 - phi_2014_2013 +
+      phi_2015_2015 - phi_2015_2014 +
+      phi_2016_2016 - phi_2016_2015 +
+      phi_2017_2017 - phi_2017_2016 +
+      phi_2018_2018 - phi_2018_2017 +
+      phi_2019_2019 - phi_2019_2018 +
+      phi_2020_2020 - phi_2020_2019
+  )
+}
+
+#==============================================================================#
+# 2. Analysis
+#==============================================================================#
+
+# Read in formatted data:
+work <- readRDS(file = "data/brfss_working_19Jan2024.RDS") %>% 
+  filter(year != 2021)
+  
+#---------------
+# Descriptive:
+#---------------
+
+# Plot of State Minimum Wage over time, NY highlighted
+pdf(paste("figures/state_minimum_wage_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),
+    width = 7, height = 7)
+work %>% 
+  ggplot(aes(x = year, y = state_mw, group = state_abv)) + 
+  geom_line(lwd = 2) +
+  gghighlight(state_abv == "NY", unhighlighted_params = list(color = "black", linewidth = 0.15)) +
+  ylab("Minimum Wage") +
+  xlab("Year") +
+  theme_classic() +
+  scale_x_continuous(breaks = 2013:2021)
+dev.off()
+
+# Table, Binarized Exposure (consistent vs. non-consistent over time)
+temp <- work %>% 
+  group_by(state, year) %>% 
+  slice(1)
+
+write.table(table(temp$exposure, temp$year),
+            file = paste("tables/consistent_states_", format(Sys.Date(), "%d%b%Y"), ".txt", sep = ""),
+            quote = FALSE)
+
+# Plot of proportion with self-rated health of fair or poor
+# pdf("figures/self_rated_health.pdf",
+#     paste("figures/self_rated_health_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
+# work %>%
+#   mutate(exposure = as.factor(exposure)) %>% 
+#   group_by(exposure, year) %>%
+#   summarise(health = mean(genhlth_bin, na.rm = T),
+#             n = n()) %>%
+#   ggplot(aes(x = year, y = health)) +
+#   geom_line(aes(lty = exposure)) +
+#   geom_point(size = 1)+
+#   ylab("Proportion with Excellent or Very Good (Self-Rated)") +
+#   xlab("Year") +
+#   theme_classic() +
+#   scale_colour_grey(start = 0.8, end = 0.9) +
+#   scale_x_continuous(breaks=2013:2021) +
+#   labs(col = "Consistent")
+# dev.off()
+
+
+pdf("figures/self_rated_health.pdf",
+    paste("figures/self_rated_health_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
+work %>%
+  group_by(exposure, year) %>% 
+  summarise(health = mean(genhlth_bin),
+            n = n()) %>% 
+  ggplot(aes(x = year, y = health, group = exposure)) +
+  geom_line(aes(lty = as.factor(exposure)))+
+  ylab("Proportion with Excellent or Very Good (Self-Rated)") +
+  xlab("Year") +
+  theme_classic() +
+  scale_colour_grey(start = 0.8, end = 0.9) +
+  scale_x_continuous(breaks=2013:2021)
+dev.off()
+
+
+pdf(paste("figures/self_rated_health_state_level_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
+work %>%
+  ggplot(aes(x = year, y = genhlth_bin, group = state)) +
+  geom_line(lwd = 0.5)+
+  ylab("Proportion with Excellent or Very Good (Self-Rated)") +
+  xlab("Year") +
+  theme_classic() +
+  scale_colour_grey(start = 0.8, end = 0.9) +
+  scale_x_continuous(breaks=2013:2021)
+dev.off()
+
+
+work %>% 
+  group_by(year, exposure) %>% 
+  summarise(mean_hlth = mean(genhlth_bin)) %>% 
+  arrange(exposure)
+
+res %>% select(ends_with("_est"))
+#------------------------------------------------------------------------------#
+# Fit Nuisance Functions:
+#   1. Fit Q-functions
+#   2. Fit g-functions
+#------------------------------------------------------------------------------#
+
+#--------------------------
+# Put data into wide format
+#--------------------------
+
+work_wide <- work %>% 
+  select(state, year, mw, exposure, pop, tanf, fs, eitc, uer, percap_inc,
+         sex1, educag2, educag3, educag4, race2, race3, age64ge, genhlth_bin,
+         genhlth) %>% 
+  pivot_wider(names_from = year,
+              values_from = c( mw, exposure, pop, tanf, fs, eitc, uer, percap_inc,
+                               sex1, educag2, educag3, educag4, race2, race3,
+                               age64ge, genhlth_bin, genhlth))
+
+work_wide <- work_wide %>% ungroup(state)
+
+#-----------------
+# Define Learners
+#------------------
+
+learners_q <- c("SL.mean", "SL.ranger", "SL.earth")
+learners_g <- c("SL.mean", "SL.lm", "SL.glmnet")
+
+#-----------------------
+# Train/Evaluation Split
+#-----------------------
+
+set.seed(19147)
+num_splits <- 2
+work_wide$split <- sample(rep(1:num_splits, length.out = nrow(work_wide), replace = F))
+
+
+
+# Learn Nuisance Functions
+# Note that models are trained on all the data *not* in split S. So Qtjk_splitS
+# is outsample predictions for split S.
+
+#-----------------------
+# Fit Upper Q functions
+#-----------------------
+Q_fns <- list()
+for(i in 1:8) {
+  
+  year_1 <- (2020:2013)[i]
+  
+  Q_fns[[i]] <- list()
+  for(j in 1:(8-i+1)) {
+    
+    year_2 <- (year_1:2013)[j]
+    
+    if (year_2 == year_1) {
+      
+      outcome <- work_wide[, paste("genhlth_bin_", year_1, sep = "")] %>% unlist
+      
+      Q_fns[[i]][[j]] =  map(1:num_splits, function(s) sl(df = work_wide,
+                                                        y = outcome,
+                                                        s=s,
+                                                        learners = learners_q,
+                                                        v = 10,
+                                                        exposure_2013:exposure_2020,
+                                                        pop_2013:pop_2020,
+                                                        tanf_2013:tanf_2020,
+                                                        fs_2013:fs_2020,
+                                                        eitc_2013:eitc_2020,
+                                                        uer_2013:uer_2020,
+                                                        percap_inc_2013:percap_inc_2020))
+      
+      
+    } else {
+      
+      outcome <- Q_fns[[i]][[j - 1]]
+      
+      Q_fns[[i]][[j]] =  map(1:num_splits, function(s) sl(df = work_wide,
+                                                        y = outcome[[s]],
+                                                        s=s,
+                                                        learners = learners_q,
+                                                        v = 10,
+                                                        paste("exposure_", 2013:year_2, sep = ""),
+                                                        paste("pop_", 2013:year_2, sep = ""),
+                                                        paste("tanf_", 2013:year_2, sep = ""),
+                                                        paste("fs_", 2013:year_2, sep = ""),
+                                                        paste("eitc_", 2013:year_2, sep = ""),
+                                                        paste("uer_", 2013:year_2, sep = ""),
+                                                        paste("percap_inc_", 2013:year_2, sep = "")))
+      
+    }
+    
+    
+  }
+  
+}
+
+
+#-----------------------
+# Fit Lower Q functions
+#-----------------------
+Q_min_fns <- list()
+for(i in 1:7) {
+  
+  year_1 <- (2020:2014)[i]
+  
+  Q_min_fns[[i]] <- list()
+  for(j in 1:(8-i+1)) {
+    
+    year_2 <- (year_1:2013)[j]
+    
+    if (year_2 == year_1) {
+      
+      outcome <- work_wide[, paste("genhlth_bin_", year_1-1, sep = "")] %>% unlist
+      
+      Q_min_fns[[i]][[j]] =  map(1:num_splits, function(s) sl(df = work_wide,
+                                                          y = outcome,
+                                                          s=s,
+                                                          learners = learners_q,
+                                                          v = 10,
+                                                          exposure_2013:exposure_2020,
+                                                          pop_2013:pop_2020,
+                                                          tanf_2013:tanf_2020,
+                                                          fs_2013:fs_2020,
+                                                          eitc_2013:eitc_2020,
+                                                          uer_2013:uer_2020,
+                                                          percap_inc_2013:percap_inc_2020))
+      
+      
+    } else {
+      
+      outcome <- Q_min_fns[[i]][[j - 1]]
+      
+      Q_min_fns[[i]][[j]] =  map(1:num_splits, function(s) sl(df = work_wide,
+                                                          y = outcome[[s]],
+                                                          s=s,
+                                                          learners = learners_q,
+                                                          v = 10,
+                                                          paste("exposure_", 2013:year_2, sep = ""),
+                                                          paste("pop_", 2013:year_2, sep = ""),
+                                                          paste("tanf_", 2013:year_2, sep = ""),
+                                                          paste("fs_", 2013:year_2, sep = ""),
+                                                          paste("eitc_", 2013:year_2, sep = ""),
+                                                          paste("uer_", 2013:year_2, sep = ""),
+                                                          paste("percap_inc_", 2013:year_2, sep = "")))
+      
+    }
+    
+    
+  }
+  
+}
+
+
+#------------------
+# Fit G-functions
+#------------------
+learners_g <- c("SL.mean", "SL.earth")
+g_fns <- list()
+for(i in 1:7) {
+  
+  print(i)
+  
+  year <- (2020:2014)[i]
+  
+  # outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
+  
+  form <- paste(c(paste("exposure_", year, sep = ""),
+                     " ~ ",
+                     paste(c(paste("exposure_", (year-1), sep = ""),
+                             paste("tanf_", (year-1), sep = ""),
+                             paste("fs_", (year-1), sep = ""),
+                             paste("eitc_", (year-1), sep = ""),
+                             paste("uer_", (year-1), sep = ""),
+                             paste("percap_inc_", (year-1), sep = "")),
+                           collapse  = " + ")),
+                   collapse = "")
+  
+  form <- paste(c(paste("exposure_", year, sep = ""),
+                  " ~ 1"),
+                collapse = "")
+  
+  fit_data <- work_wide[work_wide[, paste("exposure_", (year-1), sep = "")] == 1, ]
+  
+  g_fns[[i]] <- map(1:num_splits, function(s) {
+    
+    fit <- glm(formula = form,
+              data = fit_data %>% filter(split != s),
+              family = binomial(link = "logit"))
+    
+    predict(fit,
+            newdata = work_wide %>%
+              select(paste("exposure_", (year-1), sep = ""),
+                     paste("pop_", (year-1), sep = ""),
+                     paste("tanf_", (year-1), sep = ""),
+                     paste("fs_", (year-1), sep = ""),
+                     paste("eitc_", (year-1), sep = ""),
+                     paste("uer_", (year-1), sep = ""),
+                     paste("percap_inc_", (year-1), sep = "")) %>%
+              mutate(across(starts_with('exposure_'), ~ 1)),
+            type = "response") %>% unlist
+    
+  })
+  
+
+  # g_fns[[i]] =  map(1:num_splits, function(s) sl(df = work_wide,
+  #                                                y = outcome,
+  #                                                s=s,
+  #                                                v = 1,
+  #                                                learners = learners_g,
+  #                                                paste("exposure_", 2013:(year-1), sep = ""),
+  #                                                paste("pop_", 2013:(year-1), sep = ""),
+  #                                                paste("tanf_", 2013:(year-1), sep = ""),
+  #                                                paste("fs_", 2013:(year-1), sep = ""),
+  #                                                paste("eitc_", 2013:(year-1), sep = ""),
+  #                                                paste("uer_", 2013:(year-1), sep = ""),
+  #                                                paste("percap_inc_", 2013:(year-1), sep = "")))
+  
+}
+
+
+
+df_eif = work_wide %>%
+  select(split,
+         paste("exposure_", 2013:2020, sep =""),
+         paste("genhlth_bin_", 2013:2020, sep = "")) %>%
+  mutate(
+    # Q-functions for end year = 2020
+     Q_2020_2020_t = ifelse(split == 1, Q_fns[[1]][[1]][[1]], Q_fns[[1]][[1]][[2]]),
+     Q_2020_2019_t = ifelse(split == 1, Q_fns[[1]][[2]][[1]], Q_fns[[1]][[2]][[2]]),
+     Q_2020_2018_t = ifelse(split == 1, Q_fns[[1]][[3]][[1]], Q_fns[[1]][[3]][[2]]),
+     Q_2020_2017_t = ifelse(split == 1, Q_fns[[1]][[4]][[1]], Q_fns[[1]][[4]][[2]]),
+     Q_2020_2016_t = ifelse(split == 1, Q_fns[[1]][[5]][[1]], Q_fns[[1]][[5]][[2]]),
+     Q_2020_2015_t = ifelse(split == 1, Q_fns[[1]][[6]][[1]], Q_fns[[1]][[6]][[2]]),
+     Q_2020_2014_t = ifelse(split == 1, Q_fns[[1]][[7]][[1]], Q_fns[[1]][[7]][[2]]),
+     Q_2020_2013_t = ifelse(split == 1, Q_fns[[1]][[8]][[1]], Q_fns[[1]][[8]][[2]]),
+     # Q-functions for end year = 2019
+     Q_2019_2019_t = ifelse(split == 1, Q_fns[[2]][[1]][[1]], Q_fns[[2]][[1]][[2]]),
+     Q_2019_2018_t = ifelse(split == 1, Q_fns[[2]][[2]][[1]], Q_fns[[2]][[2]][[2]]),
+     Q_2019_2017_t = ifelse(split == 1, Q_fns[[2]][[3]][[1]], Q_fns[[2]][[3]][[2]]),
+     Q_2019_2016_t = ifelse(split == 1, Q_fns[[2]][[4]][[1]], Q_fns[[2]][[4]][[2]]),
+     Q_2019_2015_t = ifelse(split == 1, Q_fns[[2]][[5]][[1]], Q_fns[[2]][[5]][[2]]),
+     Q_2019_2014_t = ifelse(split == 1, Q_fns[[2]][[6]][[1]], Q_fns[[2]][[6]][[2]]),
+     Q_2019_2013_t = ifelse(split == 1, Q_fns[[2]][[7]][[1]], Q_fns[[2]][[7]][[2]]),
+     # Q-functions for end year = 2018
+     Q_2018_2018_t = ifelse(split == 1, Q_fns[[3]][[1]][[1]], Q_fns[[3]][[1]][[2]]),
+     Q_2018_2017_t = ifelse(split == 1, Q_fns[[3]][[2]][[1]], Q_fns[[3]][[2]][[2]]),
+     Q_2018_2016_t = ifelse(split == 1, Q_fns[[3]][[3]][[1]], Q_fns[[3]][[3]][[2]]),
+     Q_2018_2015_t = ifelse(split == 1, Q_fns[[3]][[4]][[1]], Q_fns[[3]][[4]][[2]]),
+     Q_2018_2014_t = ifelse(split == 1, Q_fns[[3]][[5]][[1]], Q_fns[[3]][[5]][[2]]),
+     Q_2018_2013_t = ifelse(split == 1, Q_fns[[3]][[6]][[1]], Q_fns[[3]][[6]][[2]]),
+     # Q-functions for end year = 2017
+     Q_2017_2017_t = ifelse(split == 1, Q_fns[[4]][[1]][[1]], Q_fns[[4]][[1]][[2]]),
+     Q_2017_2016_t = ifelse(split == 1, Q_fns[[4]][[2]][[1]], Q_fns[[4]][[2]][[2]]),
+     Q_2017_2015_t = ifelse(split == 1, Q_fns[[4]][[3]][[1]], Q_fns[[4]][[3]][[2]]),
+     Q_2017_2014_t = ifelse(split == 1, Q_fns[[4]][[4]][[1]], Q_fns[[4]][[4]][[2]]),
+     Q_2017_2013_t = ifelse(split == 1, Q_fns[[4]][[5]][[1]], Q_fns[[4]][[5]][[2]]),
+     # Q-functions for end year = 2016
+     Q_2016_2016_t = ifelse(split == 1, Q_fns[[5]][[1]][[1]], Q_fns[[5]][[1]][[2]]),
+     Q_2016_2015_t = ifelse(split == 1, Q_fns[[5]][[2]][[1]], Q_fns[[5]][[2]][[2]]),
+     Q_2016_2014_t = ifelse(split == 1, Q_fns[[5]][[3]][[1]], Q_fns[[5]][[3]][[2]]),
+     Q_2016_2013_t = ifelse(split == 1, Q_fns[[5]][[4]][[1]], Q_fns[[5]][[4]][[2]]),
+     # Q-functions for end year = 2015
+     Q_2015_2015_t = ifelse(split == 1, Q_fns[[6]][[1]][[1]], Q_fns[[6]][[1]][[2]]),
+     Q_2015_2014_t = ifelse(split == 1, Q_fns[[6]][[2]][[1]], Q_fns[[6]][[2]][[2]]),
+     Q_2015_2013_t = ifelse(split == 1, Q_fns[[6]][[3]][[1]], Q_fns[[6]][[3]][[2]]),
+     # Q-functions for end year = 2014
+     Q_2014_2014_t = ifelse(split == 1, Q_fns[[7]][[1]][[1]], Q_fns[[7]][[1]][[2]]),
+     Q_2014_2013_t = ifelse(split == 1, Q_fns[[7]][[2]][[1]], Q_fns[[7]][[2]][[2]]),
+     # Q-functions for end year = 2013
+     Q_2013_2013_t = ifelse(split == 1, Q_fns[[8]][[1]][[1]], Q_fns[[8]][[1]][[2]]),
+     # Q-functions (lower bound) for end year = 2020
+     Q_2020_2020_min_t = ifelse(split == 1, Q_min_fns[[1]][[1]][[1]], Q_min_fns[[1]][[1]][[2]]),
+     Q_2020_2019_min_t = ifelse(split == 1, Q_min_fns[[1]][[2]][[1]], Q_min_fns[[1]][[2]][[2]]),
+     Q_2020_2018_min_t = ifelse(split == 1, Q_min_fns[[1]][[3]][[1]], Q_min_fns[[1]][[3]][[2]]),
+     Q_2020_2017_min_t = ifelse(split == 1, Q_min_fns[[1]][[4]][[1]], Q_min_fns[[1]][[4]][[2]]),
+     Q_2020_2016_min_t = ifelse(split == 1, Q_min_fns[[1]][[5]][[1]], Q_min_fns[[1]][[5]][[2]]),
+     Q_2020_2015_min_t = ifelse(split == 1, Q_min_fns[[1]][[6]][[1]], Q_min_fns[[1]][[6]][[2]]),
+     Q_2020_2014_min_t = ifelse(split == 1, Q_min_fns[[1]][[7]][[1]], Q_min_fns[[1]][[7]][[2]]),
+     Q_2020_2013_min_t = ifelse(split == 1, Q_min_fns[[1]][[8]][[1]], Q_min_fns[[1]][[8]][[2]]),
+     # Q-functions (lower bound) for end year = 2019
+     Q_2019_2019_min_t = ifelse(split == 1, Q_min_fns[[2]][[1]][[1]], Q_min_fns[[2]][[1]][[2]]),
+     Q_2019_2018_min_t = ifelse(split == 1, Q_min_fns[[2]][[2]][[1]], Q_min_fns[[2]][[2]][[2]]),
+     Q_2019_2017_min_t = ifelse(split == 1, Q_min_fns[[2]][[3]][[1]], Q_min_fns[[2]][[3]][[2]]),
+     Q_2019_2016_min_t = ifelse(split == 1, Q_min_fns[[2]][[4]][[1]], Q_min_fns[[2]][[4]][[2]]),
+     Q_2019_2015_min_t = ifelse(split == 1, Q_min_fns[[2]][[5]][[1]], Q_min_fns[[2]][[5]][[2]]),
+     Q_2019_2014_min_t = ifelse(split == 1, Q_min_fns[[2]][[6]][[1]], Q_min_fns[[2]][[6]][[2]]),
+     Q_2019_2013_min_t = ifelse(split == 1, Q_min_fns[[2]][[7]][[1]], Q_min_fns[[2]][[7]][[2]]),
+     # Q-functions (lower bound) for end year = 2018
+     Q_2018_2018_min_t = ifelse(split == 1, Q_min_fns[[3]][[1]][[1]], Q_min_fns[[3]][[1]][[2]]),
+     Q_2018_2017_min_t = ifelse(split == 1, Q_min_fns[[3]][[2]][[1]], Q_min_fns[[3]][[2]][[2]]),
+     Q_2018_2016_min_t = ifelse(split == 1, Q_min_fns[[3]][[3]][[1]], Q_min_fns[[3]][[3]][[2]]),
+     Q_2018_2015_min_t = ifelse(split == 1, Q_min_fns[[3]][[4]][[1]], Q_min_fns[[3]][[4]][[2]]),
+     Q_2018_2014_min_t = ifelse(split == 1, Q_min_fns[[3]][[5]][[1]], Q_min_fns[[3]][[5]][[2]]),
+     Q_2018_2013_min_t = ifelse(split == 1, Q_min_fns[[3]][[6]][[1]], Q_min_fns[[3]][[6]][[2]]),
+     # Q-functions (lower bound) for end year = 2017
+     Q_2017_2017_min_t = ifelse(split == 1, Q_min_fns[[4]][[1]][[1]], Q_min_fns[[4]][[1]][[2]]),
+     Q_2017_2016_min_t = ifelse(split == 1, Q_min_fns[[4]][[2]][[1]], Q_min_fns[[4]][[2]][[2]]),
+     Q_2017_2015_min_t = ifelse(split == 1, Q_min_fns[[4]][[3]][[1]], Q_min_fns[[4]][[3]][[2]]),
+     Q_2017_2014_min_t = ifelse(split == 1, Q_min_fns[[4]][[4]][[1]], Q_min_fns[[4]][[4]][[2]]),
+     Q_2017_2013_min_t = ifelse(split == 1, Q_min_fns[[4]][[5]][[1]], Q_min_fns[[4]][[5]][[2]]),
+     # Q-functions (lower bound) for end year = 2016
+     Q_2016_2016_min_t = ifelse(split == 1, Q_min_fns[[5]][[1]][[1]], Q_min_fns[[5]][[1]][[2]]),
+     Q_2016_2015_min_t = ifelse(split == 1, Q_min_fns[[5]][[2]][[1]], Q_min_fns[[5]][[2]][[2]]),
+     Q_2016_2014_min_t = ifelse(split == 1, Q_min_fns[[5]][[3]][[1]], Q_min_fns[[5]][[3]][[2]]),
+     Q_2016_2013_min_t = ifelse(split == 1, Q_min_fns[[5]][[4]][[1]], Q_min_fns[[5]][[4]][[2]]),
+     # Q-functions (lower bound) for end year = 2015
+     Q_2015_2015_min_t = ifelse(split == 1, Q_min_fns[[6]][[1]][[1]], Q_min_fns[[6]][[1]][[2]]),
+     Q_2015_2014_min_t = ifelse(split == 1, Q_min_fns[[6]][[2]][[1]], Q_min_fns[[6]][[2]][[2]]),
+     Q_2015_2013_min_t = ifelse(split == 1, Q_min_fns[[6]][[3]][[1]], Q_min_fns[[6]][[3]][[2]]),
+     # Q-functions (lower bound) for end year = 2014
+     Q_2014_2014_min_t = ifelse(split == 1, Q_min_fns[[7]][[1]][[1]], Q_min_fns[[7]][[1]][[2]]),
+     Q_2014_2013_min_t = ifelse(split == 1, Q_min_fns[[7]][[2]][[1]], Q_min_fns[[7]][[2]][[2]]),
+     # G-functions
+     g2020 = ifelse(split == 1, g_fns[[1]][[1]], g_fns[[1]][[2]]),
+     g2019 = ifelse(split == 1, g_fns[[2]][[1]], g_fns[[2]][[2]]),
+     g2018 = ifelse(split == 1, g_fns[[3]][[1]], g_fns[[3]][[2]]),
+     g2017 = ifelse(split == 1, g_fns[[4]][[1]], g_fns[[4]][[2]]),
+     g2016 = ifelse(split == 1, g_fns[[5]][[1]], g_fns[[5]][[2]]),
+     g2015 = ifelse(split == 1, g_fns[[6]][[1]], g_fns[[6]][[2]]),
+     g2014 = ifelse(split == 1, g_fns[[7]][[1]], g_fns[[7]][[2]])
+         )
+
+df_eif2 <- df_eif %>% repair_g
+
+temp <- df_eif2 %>% calc_if()
+
+res <- temp %>% summarise(across(psi2014:psi2020, list(est=mean, var=~var(.)/n()))) %>% 
+  data.frame
+
+
+res %>% 
+  select(ends_with("_est")) %>% unlist
+
+#------------------------
+# Trajectory of interest
+#------------------------
+
+a_bar <- rep(1, length(2013:2019))
+
+#---------------------------------------------------
+# Q^j,k,m
+# Where: 
+#   j indexes the outcomes
+#   k indexes the conditioning set
+#   m indexes the level of the iterated expectation
+#---------------------------------------------------
+
+set.seed(10101)
+
+# Iterate through outcomes Y_2019 and Y_2013
+Q_fits <- map(0:(length(a_bar)-1), function(j) {
+  
+  Q_models <- list()
+  Q_models[[1]] <- list() # Q-models for scenario (1) below
+  Q_models[[2]] <- list() # Q-models for scenario (2) below
+  Q_preds <- list()
+  Q_preds2 <- list()
+  
+  # For the outcome Y_j, we need to fit iterated expectations conditional on:
+  #   (1) FOR ALL j: Treatment A up to time j, W up to time j 
+  #   (2) FOR j < 2019: Treatment up to time j+1, W up to time j+1
+  
+  # This loop will cover (1)
+  for(t in 0:(length(a_bar)-1-j)) {
+    
+    print(t)
+    #---------------
+    # Define Outcome
+    #---------------
+    
+    # For o
+    if (t == 0) {
+      
+      Y_t <-  train_dat[train_dat$year == 2019-j, "genhlth_bin"] %>% unlist
+      
+    } else {
+      
+      Y_t <- Q_preds[[t]]
+      
+    }
+    
+    #----------------------
+    # Define Design Matrix
+    #----------------------
+    
+    design <- train_dat %>% 
+      filter(year == 2019-j-t) %>% 
+      dplyr::select(exposure, tanf, fs, uer, percap_inc, eitc, pop,
+                    state, month,
+                    sex, educag, race, age64, sex1, educag2, educag3, educag4,
+                    race2, race3, age64ge)
+    
+    #--------------
+    # Fit Q-model:
+    #--------------
+    
+    fit_outcome <- SuperLearner(Y = Y_t, X = design, SL.library = learners_q)
+    
+    #--------------------------
+    # Save output:
+    #   1. Fit Q-model
+    #   2. Predicted outcomes based on
+    #         - State-level covariates from current year
+    #         - Indiv-level covariates from prev year
+    #----------------------------------------------------
+    
+    # Predict outcomes given current state-level covariates and
+    # individual characterstics matching those of individuals in previous year
+    c_state_char <- design %>% 
+      dplyr::select(state, tanf, fs, uer, percap_inc, eitc, pop, sex1, educag2,
+                    educag3, educag4, race2, race3, age64ge) %>% 
+      group_by(state) %>% 
+      slice(1)
+    
+    p_indiv_char <- train_dat %>% 
+      filter(year == 2019-j-t-1) %>% 
+      dplyr::select(state, sex, educag, race, age64, month)
+    
+    # Merge current state and previous year individual characterestics
+    # (If previous year sample were observed this year)
+    intervene_design <- p_indiv_char %>% 
+      left_join(c_state_char, by = "state") %>% 
+      mutate(exposure = a_bar[length(a_bar)- j - t]) %>% 
+      dplyr::select(exposure, tanf, fs, uer, percap_inc, eitc, pop,
+                    state, month,
+                    sex, educag, race, age64, sex1, educag2, educag3, educag4,
+                    race2, race3, age64ge)
+    
+    Q_models[[1]][[t+1]] <- fit_outcome
+    
+    if( t != 6 ) {
+      Q_preds[[t+1]] <- predict(fit_outcome, newdata = intervene_design)$pred
+    }
+    
+    
+    
+    
+  }
+  
+  # This loop will cover (2)
+  if (j > 0) {
+    
+    
+    for(t in 0:(length(a_bar)-2-j)) {
+      
+      print(t)
+      
+      #---------------
+      # Define Outcome
+      #---------------
+      
+      # For o
+      if (t == 0) {
+        
+        outcome <-  train_dat[train_dat$year == 2019-j-t, "genhlth_bin"] %>% unlist
+        
+      } else {
+        
+        outcome <- Q_preds2[[t]] 
+        # length of this is equal to the number of individuals observed at year
+        # 2019-j-t
+        
+        
+      }
+      
+      #-----------------------------------------------------------------
+      # Define Design Matrix using data from interval 2019-j (future!)
+      #-----------------------------------------------------------------
+      
+      # Future state data
+      f_state_char <- train_dat %>% 
+        filter(year == 2019-j-t+1) %>% 
+        dplyr::select(state, tanf, fs, uer, percap_inc, eitc, pop, sex1, educag2,
+                      educag3, educag4, race2, race3, age64ge) %>% 
+        group_by(state) %>% 
+        slice(1)
+      
+      # Current individual data (under assumption that indiv-covars are static
+      # covars at time 2019-j-t = covars at time 2019-j-t+1, need to use covars
+      # from time 2019-j-t because this is where outcomes come from!!!)
+      c_indiv_char <- train_dat %>% 
+        filter(year == 2019-j-t) %>% 
+        dplyr::select(state, sex, educag, race, age64, month)
+      
+      # Merge current individual data and future state data:
+      design <- c_indiv_char %>% 
+        left_join(f_state_char, by = "state") %>% 
+        mutate(exposure = a_bar[length(a_bar)- j - t]) %>% 
+        dplyr::select(exposure, tanf, fs, uer, percap_inc, eitc, pop,
+                      state, month,
+                      sex, educag, race, age64, sex1, educag2, educag3, educag4,
+                      race2, race3, age64ge)
+      
+      
+      
+      #--------------
+      # Fit Q-model:
+      #--------------
+      
+      fit_outcome <- SuperLearner(Y = outcome, X = design, SL.library = learners_q)
+      
+      #--------------------------
+      # Save output:
+      #   1. Fit Q-model
+      #   2. Predicted outcomes
+      #--------------------------
+      
+      # We have E[Y_k-1|A_k,W_k]
+      #   - Outcome conditional on State-level characteristics from time k
+      #   - and indiv-level characteristics at time k
+      # We want to now regress E[Y_k-1|A_l,W_k] on (A_k-1, W_k-1).
+      # Obtain predictions \hat{E}[Y_k-1|A_k, W_k] for individuals from time k-1
+      c_state_char <- design %>% 
+        dplyr::select(state, tanf, fs, uer, percap_inc, eitc, pop, sex1, educag2,
+                      educag3, educag4, race2, race3, age64ge) %>% 
+        group_by(state) %>% 
+        slice(1)
+      
+      # Unclear whether we should use previous or current
+      c_indiv_char <- train_dat %>% 
+        filter(year == 2019-j-t) %>% 
+        dplyr::select(state, sex, educag, race, age64, month)
+      
+      # Merge current state and previous year individual characterestics
+      # (If previous year sample were observed this year)
+      intervene_design <- c_indiv_char %>% 
+        left_join(c_state_char, by = "state") %>% 
+        mutate(exposure = a_bar[length(a_bar)- j - t]) %>% 
+        dplyr::select(exposure, tanf, fs, uer, percap_inc, eitc, pop,
+                      state, month,
+                      sex, educag, race, age64, sex1, educag2, educag3, educag4,
+                      race2, race3, age64ge)
+      
+      Q_models[[2]][[t+1]] <- fit_outcome
+      
+      if( t != 6 ) {
+        Q_preds2[[t+1]] <- predict(fit_outcome, newdata = intervene_design)$pred
+      }
+      
+      
+      
+      
+    }
+    
+    
+    
+  } else {
+    
+    Q_models[[1]][[2]] <- NULL 
+    
+  }
+  
+  return(list(Q_models, Q_preds))
+  
+  
+})
+
+
+#-------------
+# g-functions
+#-------------
+
+g_models <- list()
+g_scores <- list()
+set.seed(10101)
+for(t in 0:(length(a_bar)-1)) {
+  
+  #----------------------
+  # Create design matrix
+  #
+  # Note: For state-level exposure model, we will only use state-level
+  # covariates. A single observation per state/per year will contain
+  # all the needed information. We will incorporate individual level data
+  # by summarising patient-level characteristics
+  #----------------------
+  
+  fit_dat <- train_dat %>% 
+    filter(year %in% c(2019-t)) %>% 
+    group_by(state) %>% 
+    slice(1) %>% 
+    ungroup(state) %>% 
+    dplyr::select(exposure, tanf, fs, uer, percap_inc, eitc, pop,
+                  sex1, educag2, educag3, educag4,
+                  race2, race3,
+                  age64ge, year)
+  
+  
+  #----------------
+  # Fit Outcome
+  #----------------
+  
+  Y_t <- fit_dat["exposure"] %>% unlist
+  
+  
+  #--------------------------
+  # Save output:
+  #   1. Fit Q-model
+  #   2. Predicted outcomes
+  #--------------------------
+  
+  if(all(Y_t == 1)) {
+    
+    g_models[[t+1]] <- 1
+    g_scores[[t+1]] <- rep(1, 51)
+    
+  } else {
+    
+    design <- fit_dat %>% 
+      dplyr::select(-exposure)
+    
+    fit_g <- SuperLearner(Y = Y_t, X = design, SL.library = learners_g,
+                          family = binomial)
+    
+    g_models[[t+1]] <- fit_g
+    g_scores[[t+1]] <- predict(fit_g)$pred
+    
+  }
+  
+}
+
+
+#==============================================================================#
+# Estimate Causal Effect:
+#   1. Obtain Q- and g-predictions from the evaluation data
+#   2. Construct IF for Phi_j,k
+#==============================================================================#
+
+#--------------------------------------------------------
+# IF for Phi(j,k)
+#
+# Required Nuisance Functions:
+#   1) Outcome models Q^(j,k,m) for m = 0,...,k
+#   2) Cumulative propensity models g_m for m = 0,...,k
+#--------------------------------------------------------
+
+phi_jk <- matrix(0,
+                 nrow = length(2013:2019),
+                 ncol = length(2013:2019))
+
+# Which Phi(j,k) is being estimated
+j <- 0
+k <- 1
+
+# Data for estimation of Phi(j,k)
+if (j == 0 & k == 0) {
+  
+  eval_jk_dat <- eval_dat %>% filter(year == 2013)
+  
+  phi_jk[1,1] <-  mean(eval_jk_dat$genhlth_bin)
+  
+} else {
+  
+  # For phi_jk, need access to the following:
+  #  1. g_m for m = 1, k
+  #  2. Q^jkm+1
+  eval_jk_dat
+  
+  
+}
+
+
+
+
+
+# Evaluate required g-predictions on evaluation data
+if(is.list(g_models[[7]])) {
+  
+} else {
+  eval_jk_dat$g <- 1
+}
+
+# Evaluate required Q-predictions on evaluation data
+Q_models
+
+
+
+frac_ipw <- as.numeric(eval_jk_dat$exposure == 1)/(eval_jk_dat$g)
+interval <- 1
+
+
+
+
+map_dbl(1:5, function(int) {
+  
+  Q_begin <- mean(Q_preds[[length(a_bar) - int]])
+  Q_end <- mean(Q_preds[[length(a_bar) - int - 1]])
+  diff <- Q_end - Q_begin
+  
+})
+
+
+#-------------------------------------------------------------------------------
+# Predict Cumulative Propensities (g)
+#   For each year from 2013 up to year 2019, obtain predicted probabilities of trt.
+#   Take the product of cumulative treatment propensities
+#-------------------------------------------------------------------------------
+
+cum_ps_res <- map(0:6, function(m) {
+  
+  # Current propensity model:
+  c_g <- g_models[[7-m]]
+  
+  # Obtain current predictions of propensity:
+  if (is.numeric(c_g)) {
+    
+    rep(1, length = eval_jk_dat %>% nrow)
+    
+  } else {
+    
+    predict(c_g, newdata = eval_jk_dat %>% select(all_of(c_g$varNames)))[[1]] %>% 
+      unlist
+    
+  }
+  
+  
+})
+
+
+ps_cols <- do.call(cbind, cum_ps_res)
+colnames(ps_cols) <- paste("ps", c(0:6), sep = "")
+
+g_res <- map(0:6, function (int) {
+  
+  apply(as.matrix(ps_cols[, 1:(int+1)]), 1, function(x) {tail(cumprod(x), 1)})
+  
+  
+})
+
+g_cols <- do.call(cbind, g_res)
+colnames(g_cols) <- paste("g", c(0:6), sep = "")
+
+#-------------------------------------------------------------------------------
+# Predict outcome regressions (Q)
+#   For each combination of j=2013, ... , 2019 and k = 2013, ..., 2019
+#   Predict Q^j,k,m for m = 2013, ...., k+1
+#-------------------------------------------------------------------------------
+
+Q_fits[[1]][[1]]
+
+
+
+
+
+
+
+
+
+
+
+
