@@ -617,14 +617,35 @@ res %>%
 # Section 2. Plot Outcomes
 #------------------------------------------------------------------------------#
 
-res %>% 
+# Mean, Variance, and Standard Error of Observed Self-Rated Health
+observed <- work %>% 
+  group_by(year) %>% 
+  summarise(est = mean(genhlth_bin),
+            var = var(genhlth_bin),
+            se = sqrt(var/n()))
+
+observed <- observed %>% 
+  mutate(label = "Observed")
+
+plot_res <- res %>% 
   pivot_longer(cols = ends_with(c("_est", "_var")),
-               names_to = "Year",
+               names_to = "year",
                names_prefix = "psi") %>% 
-  mutate(suffix = substr(Year, nchar(Year)-3+1, nchar(Year)),
-         Year = substr(Year, start = 1, stop = 4) %>% as.numeric) %>% 
-  filter(suffix == "est") %>% 
-  ggplot(aes(x = Year, y = value)) +
-    geom_line() +
+  mutate(suffix = substr(year, nchar(year)-3+1, nchar(year)),
+         year = substr(year, start = 1, stop = 4) %>% as.numeric) %>% 
+  pivot_wider(names_from = suffix,
+              values_from = value) %>% 
+  mutate(se = sqrt(var),
+         label = "Consistent") %>% 
+  rbind(observed)
+
+
+
+plot_res %>% 
+  ggplot(aes(x = year, y = est)) +
+    geom_line(aes(lty = label)) +
+  ylab("Proportion with Excellent or Very Good (Self-Rated)") +
+  xlab("Year") +
+  labs(lty = "Group") +
   theme_classic()
   
