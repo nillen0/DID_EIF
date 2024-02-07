@@ -51,8 +51,8 @@ sl= function(df, y, s, learners, v, ...) {
 }
 
 repair_g = function(df) mutate(df, 
-                               g2020 = exposure_2020*g2020*g2019*g2018*g2017*g2016*g2015*g2014 +
-                                 (1-exposure_2020)*(1-g2020)*(1-g2019)*(1-g2018)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
+                               # g2020 = exposure_2020*g2020*g2019*g2018*g2017*g2016*g2015*g2014 +
+                               #   (1-exposure_2020)*(1-g2020)*(1-g2019)*(1-g2018)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
                                g2019 = exposure_2019*g2019*g2018*g2017*g2016*g2015*g2014 +
                                  (1-exposure_2019)*(1-g2019)*(1-g2018)*(1-g2017)*(1-g2016)*(1-g2015)*(1-g2014),
                                g2018 = exposure_2018*g2018*g2017*g2016*g2015*g2014 +
@@ -64,38 +64,38 @@ repair_g = function(df) mutate(df,
                                g2015 = exposure_2015*g2015*g2014 +
                                  (1-exposure_2015)*(1-g2015)*(1-g2014),
                                g2014 = exposure_2014*g2014 +
-                                 (1-exposure_2014)*(1-g2014))
+                                 (1-exposure_2014)*(1-g2014),
+                               # Modify to ensure no zeros in denominator
+                               # Only occurs if exposure = 0, does not affect
+                               # calculations
+                               g2019 = ifelse(g2019 == 0, 1, g2019),
+                               g2018 = ifelse(g2018 == 0, 1, g2018),
+                               g2017 = ifelse(g2017 == 0, 1, g2017),
+                               g2016 = ifelse(g2016 == 0, 1, g2016),
+                               g2015 = ifelse(g2015 == 0, 1, g2015),
+                               g2014 = ifelse(g2014 == 0, 1, g2014))
 
-calc_if = function(df) {
-  df %>% mutate(
-    phi11 = ( 1*(a1==0)/g1 )*(y1 - Q11t)     + Q10t,
-    phi10 = ( 1*(a1==0)/g1 )*(y0 - Q11tmin1) + Q10tmin1,
-    phi22 = ( 1*(a2==0)/g2 )*(y2 - Q22t)     + (1*(a1==0)/g1)*(Q22t - Q21t)         + Q20t,
-    phi21 = ( 1*(a2==0)/g2 )*(y1 - Q22tmin1) + (1*(a1==0)/g1)*(Q22tmin1 - Q21tmin1) + Q20tmin1,
-    psi1 =  y0 + phi11 - phi10,
-    psi2  = y0 + phi11 - phi10 + phi22 - phi21
-  )
-}
+
 calc_if = function(df) {
   df %>% mutate(
     
     # EIF for Phi_jk
-    phi_2020_2020 = ( 1*(exposure_2020==1)/g2020 )*(genhlth_bin_2020 - Q_2020_2020_t)     +
-      (1*(exposure_2019==1)/g2019)*(Q_2020_2020_t - Q_2020_2019_t) +
-      (1*(exposure_2018==1)/g2018)*(Q_2020_2019_t - Q_2020_2018_t) +
-      (1*(exposure_2017==1)/g2017)*(Q_2020_2018_t - Q_2020_2017_t) +
-      (1*(exposure_2016==1)/g2016)*(Q_2020_2017_t - Q_2020_2016_t) +
-      (1*(exposure_2015==1)/g2015)*(Q_2020_2016_t - Q_2020_2015_t) +
-      (1*(exposure_2014==1)/g2014)*(Q_2020_2015_t - Q_2020_2014_t) +
-      Q_2020_2013_t,
-    phi_2020_2019 = ( 1*(exposure_2020==1)/g2020)*(genhlth_bin_2019 - Q_2020_2020_min_t)     +
-      (1*(exposure_2019==1)/g2019)*(Q_2020_2020_min_t - Q_2020_2019_min_t) +
-      (1*(exposure_2018==1)/g2018)*(Q_2020_2019_min_t - Q_2020_2018_min_t) +
-      (1*(exposure_2017==1)/g2017)*(Q_2020_2018_min_t - Q_2020_2017_min_t) +
-      (1*(exposure_2016==1)/g2016)*(Q_2020_2017_min_t - Q_2020_2016_min_t) +
-      (1*(exposure_2015==1)/g2015)*(Q_2020_2016_min_t - Q_2020_2015_min_t) +
-      (1*(exposure_2014==1)/g2014)*(Q_2020_2015_min_t - Q_2020_2014_min_t) +
-      Q_2020_2013_min_t,
+    # phi_2020_2020 = ( 1*(exposure_2020==1)/g2020 )*(genhlth_bin_2020 - Q_2020_2020_t)     +
+    #   (1*(exposure_2019==1)/g2019)*(Q_2020_2020_t - Q_2020_2019_t) +
+    #   (1*(exposure_2018==1)/g2018)*(Q_2020_2019_t - Q_2020_2018_t) +
+    #   (1*(exposure_2017==1)/g2017)*(Q_2020_2018_t - Q_2020_2017_t) +
+    #   (1*(exposure_2016==1)/g2016)*(Q_2020_2017_t - Q_2020_2016_t) +
+    #   (1*(exposure_2015==1)/g2015)*(Q_2020_2016_t - Q_2020_2015_t) +
+    #   (1*(exposure_2014==1)/g2014)*(Q_2020_2015_t - Q_2020_2014_t) +
+    #   Q_2020_2013_t,
+    # phi_2020_2019 = ( 1*(exposure_2020==1)/g2020)*(genhlth_bin_2019 - Q_2020_2020_min_t)     +
+    #   (1*(exposure_2019==1)/g2019)*(Q_2020_2020_min_t - Q_2020_2019_min_t) +
+    #   (1*(exposure_2018==1)/g2018)*(Q_2020_2019_min_t - Q_2020_2018_min_t) +
+    #   (1*(exposure_2017==1)/g2017)*(Q_2020_2018_min_t - Q_2020_2017_min_t) +
+    #   (1*(exposure_2016==1)/g2016)*(Q_2020_2017_min_t - Q_2020_2016_min_t) +
+    #   (1*(exposure_2015==1)/g2015)*(Q_2020_2016_min_t - Q_2020_2015_min_t) +
+    #   (1*(exposure_2014==1)/g2014)*(Q_2020_2015_min_t - Q_2020_2014_min_t) +
+    #   Q_2020_2013_min_t,
     
     phi_2019_2019 = ( 1*(exposure_2019==1)/g2019 )*(genhlth_bin_2019 - Q_2019_2019_t)     +
       (1*(exposure_2018==1)/g2018)*(Q_2019_2019_t - Q_2019_2018_t) +
@@ -185,15 +185,15 @@ calc_if = function(df) {
       phi_2016_2016 - phi_2016_2015 +
       phi_2017_2017 - phi_2017_2016 +
       phi_2018_2018 - phi_2018_2017 +
-      phi_2019_2019 - phi_2019_2018,
-    psi2020 = genhlth_bin_2013 +
-      phi_2014_2014 - phi_2014_2013 +
-      phi_2015_2015 - phi_2015_2014 +
-      phi_2016_2016 - phi_2016_2015 +
-      phi_2017_2017 - phi_2017_2016 +
-      phi_2018_2018 - phi_2018_2017 +
-      phi_2019_2019 - phi_2019_2018 +
-      phi_2020_2020 - phi_2020_2019
+      phi_2019_2019 - phi_2019_2018
+    # psi2020 = genhlth_bin_2013 +
+    #   phi_2014_2014 - phi_2014_2013 +
+    #   phi_2015_2015 - phi_2015_2014 +
+    #   phi_2016_2016 - phi_2016_2015 +
+    #   phi_2017_2017 - phi_2017_2016 +
+    #   phi_2018_2018 - phi_2018_2017 +
+    #   phi_2019_2019 - phi_2019_2018 +
+    #   phi_2020_2020 - phi_2020_2019
   )
 }
 
@@ -203,7 +203,7 @@ calc_if = function(df) {
 
 # Read in formatted data:
 work <- readRDS(file = "data/brfss_working_19Jan2024.RDS") %>% 
-  filter(year != 2021)
+  filter(year < 2020)
   
 #---------------
 # Descriptive:
@@ -219,7 +219,7 @@ work %>%
   ylab("Minimum Wage") +
   xlab("Year") +
   theme_classic() +
-  scale_x_continuous(breaks = 2013:2021)
+  scale_x_continuous(breaks = 2013:2019)
 dev.off()
 
 # Table, Binarized Exposure (consistent vs. non-consistent over time)
@@ -230,6 +230,12 @@ temp <- work %>%
 write.table(table(temp$exposure, temp$year),
             file = paste("tables/consistent_states_", format(Sys.Date(), "%d%b%Y"), ".txt", sep = ""),
             quote = FALSE)
+
+# Years where changes occur: 
+# (1) 2014 -> 2015,
+# (2) 2015 -> 2016,
+# (3) 2017 -> 2018,
+# (4) 2018 -> 2019
 
 # Plot of proportion with self-rated health of fair or poor
 # pdf("figures/self_rated_health.pdf",
@@ -324,13 +330,18 @@ work_wide$split <- sample(rep(1:num_splits, length.out = nrow(work_wide), replac
 #-----------------------
 # Fit Upper Q functions
 #-----------------------
+
 Q_fns <- list()
-for(i in 1:8) {
+for(i in 1:7) {
   
-  year_1 <- (2020:2013)[i]
+
+  
+  year_1 <- (2019:2013)[i]
   
   Q_fns[[i]] <- list()
-  for(j in 1:(8-i+1)) {
+  for(j in 1:(7-i+1)) {
+    
+    
     
     year_2 <- (year_1:2013)[j]
     
@@ -342,14 +353,14 @@ for(i in 1:8) {
                                                         y = outcome,
                                                         s=s,
                                                         learners = learners_q,
-                                                        v = 10,
-                                                        exposure_2013:exposure_2020,
-                                                        pop_2013:pop_2020,
-                                                        tanf_2013:tanf_2020,
-                                                        fs_2013:fs_2020,
-                                                        eitc_2013:eitc_2020,
-                                                        uer_2013:uer_2020,
-                                                        percap_inc_2013:percap_inc_2020))
+                                                        v = 4,
+                                                        paste("exposure_", 2013:year_2, sep = ""),
+                                                        paste("pop_", 2013:year_2, sep = ""),
+                                                        paste("tanf_", 2013:year_2, sep = ""),
+                                                        paste("fs_", 2013:year_2, sep = ""),
+                                                        paste("eitc_", 2013:year_2, sep = ""),
+                                                        paste("uer_", 2013:year_2, sep = ""),
+                                                        paste("percap_inc_", 2013:year_2, sep = "")))
       
       
     } else {
@@ -360,7 +371,7 @@ for(i in 1:8) {
                                                         y = outcome[[s]],
                                                         s=s,
                                                         learners = learners_q,
-                                                        v = 10,
+                                                        v = 4,
                                                         paste("exposure_", 2013:year_2, sep = ""),
                                                         paste("pop_", 2013:year_2, sep = ""),
                                                         paste("tanf_", 2013:year_2, sep = ""),
@@ -381,12 +392,15 @@ for(i in 1:8) {
 # Fit Lower Q functions
 #-----------------------
 Q_min_fns <- list()
-for(i in 1:7) {
+for(i in 1:6) {
   
-  year_1 <- (2020:2014)[i]
+  
+  year_1 <- (2019:2014)[i]
   
   Q_min_fns[[i]] <- list()
-  for(j in 1:(8-i+1)) {
+  for(j in 1:(7-i+1)) {
+    
+    
     
     year_2 <- (year_1:2013)[j]
     
@@ -398,14 +412,14 @@ for(i in 1:7) {
                                                           y = outcome,
                                                           s=s,
                                                           learners = learners_q,
-                                                          v = 10,
-                                                          exposure_2013:exposure_2020,
-                                                          pop_2013:pop_2020,
-                                                          tanf_2013:tanf_2020,
-                                                          fs_2013:fs_2020,
-                                                          eitc_2013:eitc_2020,
-                                                          uer_2013:uer_2020,
-                                                          percap_inc_2013:percap_inc_2020))
+                                                          v = 4,
+                                                          paste("exposure_", 2013:year_2, sep = ""),
+                                                          paste("pop_", 2013:year_2, sep = ""),
+                                                          paste("tanf_", 2013:year_2, sep = ""),
+                                                          paste("fs_", 2013:year_2, sep = ""),
+                                                          paste("eitc_", 2013:year_2, sep = ""),
+                                                          paste("uer_", 2013:year_2, sep = ""),
+                                                          paste("percap_inc_", 2013:year_2, sep = "")))
       
       
     } else {
@@ -416,7 +430,7 @@ for(i in 1:7) {
                                                           y = outcome[[s]],
                                                           s=s,
                                                           learners = learners_q,
-                                                          v = 10,
+                                                          v = 4,
                                                           paste("exposure_", 2013:year_2, sep = ""),
                                                           paste("pop_", 2013:year_2, sep = ""),
                                                           paste("tanf_", 2013:year_2, sep = ""),
@@ -436,13 +450,14 @@ for(i in 1:7) {
 #------------------
 # Fit G-functions
 #------------------
-learners_g <- c("SL.mean", "SL.earth")
+
+# Years where exposure changes occur (all other years have probability of 1)
+year_set <- c(2019, 2018, 2016, 2015)
+
 g_fns <- list()
-for(i in 1:7) {
+for(i in 1:4) {
   
-  print(i)
-  
-  year <- (2020:2014)[i]
+  year <- year_set[i]
   
   # outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
   
@@ -483,135 +498,120 @@ for(i in 1:7) {
     
   })
   
-
-  # g_fns[[i]] =  map(1:num_splits, function(s) sl(df = work_wide,
-  #                                                y = outcome,
-  #                                                s=s,
-  #                                                v = 1,
-  #                                                learners = learners_g,
-  #                                                paste("exposure_", 2013:(year-1), sep = ""),
-  #                                                paste("pop_", 2013:(year-1), sep = ""),
-  #                                                paste("tanf_", 2013:(year-1), sep = ""),
-  #                                                paste("fs_", 2013:(year-1), sep = ""),
-  #                                                paste("eitc_", 2013:(year-1), sep = ""),
-  #                                                paste("uer_", 2013:(year-1), sep = ""),
-  #                                                paste("percap_inc_", 2013:(year-1), sep = "")))
   
 }
 
 
 
-df_eif = work_wide %>%
+df_eif <-  work_wide %>%
   select(split,
-         paste("exposure_", 2013:2020, sep =""),
-         paste("genhlth_bin_", 2013:2020, sep = "")) %>%
+         paste("exposure_", 2013:2019, sep =""),
+         paste("genhlth_bin_", 2013:2019, sep = "")) %>%
   mutate(
     # Q-functions for end year = 2020
-     Q_2020_2020_t = ifelse(split == 1, Q_fns[[1]][[1]][[1]], Q_fns[[1]][[1]][[2]]),
-     Q_2020_2019_t = ifelse(split == 1, Q_fns[[1]][[2]][[1]], Q_fns[[1]][[2]][[2]]),
-     Q_2020_2018_t = ifelse(split == 1, Q_fns[[1]][[3]][[1]], Q_fns[[1]][[3]][[2]]),
-     Q_2020_2017_t = ifelse(split == 1, Q_fns[[1]][[4]][[1]], Q_fns[[1]][[4]][[2]]),
-     Q_2020_2016_t = ifelse(split == 1, Q_fns[[1]][[5]][[1]], Q_fns[[1]][[5]][[2]]),
-     Q_2020_2015_t = ifelse(split == 1, Q_fns[[1]][[6]][[1]], Q_fns[[1]][[6]][[2]]),
-     Q_2020_2014_t = ifelse(split == 1, Q_fns[[1]][[7]][[1]], Q_fns[[1]][[7]][[2]]),
-     Q_2020_2013_t = ifelse(split == 1, Q_fns[[1]][[8]][[1]], Q_fns[[1]][[8]][[2]]),
+     # Q_2020_2020_t = ifelse(split == 1, Q_fns[[1]][[1]][[1]], Q_fns[[1]][[1]][[2]]),
+     # Q_2020_2019_t = ifelse(split == 1, Q_fns[[1]][[2]][[1]], Q_fns[[1]][[2]][[2]]),
+     # Q_2020_2018_t = ifelse(split == 1, Q_fns[[1]][[3]][[1]], Q_fns[[1]][[3]][[2]]),
+     # Q_2020_2017_t = ifelse(split == 1, Q_fns[[1]][[4]][[1]], Q_fns[[1]][[4]][[2]]),
+     # Q_2020_2016_t = ifelse(split == 1, Q_fns[[1]][[5]][[1]], Q_fns[[1]][[5]][[2]]),
+     # Q_2020_2015_t = ifelse(split == 1, Q_fns[[1]][[6]][[1]], Q_fns[[1]][[6]][[2]]),
+     # Q_2020_2014_t = ifelse(split == 1, Q_fns[[1]][[7]][[1]], Q_fns[[1]][[7]][[2]]),
+     # Q_2020_2013_t = ifelse(split == 1, Q_fns[[1]][[8]][[1]], Q_fns[[1]][[8]][[2]]),
      # Q-functions for end year = 2019
-     Q_2019_2019_t = ifelse(split == 1, Q_fns[[2]][[1]][[1]], Q_fns[[2]][[1]][[2]]),
-     Q_2019_2018_t = ifelse(split == 1, Q_fns[[2]][[2]][[1]], Q_fns[[2]][[2]][[2]]),
-     Q_2019_2017_t = ifelse(split == 1, Q_fns[[2]][[3]][[1]], Q_fns[[2]][[3]][[2]]),
-     Q_2019_2016_t = ifelse(split == 1, Q_fns[[2]][[4]][[1]], Q_fns[[2]][[4]][[2]]),
-     Q_2019_2015_t = ifelse(split == 1, Q_fns[[2]][[5]][[1]], Q_fns[[2]][[5]][[2]]),
-     Q_2019_2014_t = ifelse(split == 1, Q_fns[[2]][[6]][[1]], Q_fns[[2]][[6]][[2]]),
-     Q_2019_2013_t = ifelse(split == 1, Q_fns[[2]][[7]][[1]], Q_fns[[2]][[7]][[2]]),
+     Q_2019_2019_t = ifelse(split == 1, Q_fns[[1]][[1]][[1]], Q_fns[[1]][[1]][[2]]),
+     Q_2019_2018_t = ifelse(split == 1, Q_fns[[1]][[2]][[1]], Q_fns[[1]][[2]][[2]]),
+     Q_2019_2017_t = ifelse(split == 1, Q_fns[[1]][[3]][[1]], Q_fns[[1]][[3]][[2]]),
+     Q_2019_2016_t = ifelse(split == 1, Q_fns[[1]][[4]][[1]], Q_fns[[1]][[4]][[2]]),
+     Q_2019_2015_t = ifelse(split == 1, Q_fns[[1]][[5]][[1]], Q_fns[[1]][[5]][[2]]),
+     Q_2019_2014_t = ifelse(split == 1, Q_fns[[1]][[6]][[1]], Q_fns[[1]][[6]][[2]]),
+     Q_2019_2013_t = ifelse(split == 1, Q_fns[[1]][[7]][[1]], Q_fns[[1]][[7]][[2]]),
      # Q-functions for end year = 2018
-     Q_2018_2018_t = ifelse(split == 1, Q_fns[[3]][[1]][[1]], Q_fns[[3]][[1]][[2]]),
-     Q_2018_2017_t = ifelse(split == 1, Q_fns[[3]][[2]][[1]], Q_fns[[3]][[2]][[2]]),
-     Q_2018_2016_t = ifelse(split == 1, Q_fns[[3]][[3]][[1]], Q_fns[[3]][[3]][[2]]),
-     Q_2018_2015_t = ifelse(split == 1, Q_fns[[3]][[4]][[1]], Q_fns[[3]][[4]][[2]]),
-     Q_2018_2014_t = ifelse(split == 1, Q_fns[[3]][[5]][[1]], Q_fns[[3]][[5]][[2]]),
-     Q_2018_2013_t = ifelse(split == 1, Q_fns[[3]][[6]][[1]], Q_fns[[3]][[6]][[2]]),
+     Q_2018_2018_t = ifelse(split == 1, Q_fns[[2]][[1]][[1]], Q_fns[[2]][[1]][[2]]),
+     Q_2018_2017_t = ifelse(split == 1, Q_fns[[2]][[2]][[1]], Q_fns[[2]][[2]][[2]]),
+     Q_2018_2016_t = ifelse(split == 1, Q_fns[[2]][[3]][[1]], Q_fns[[2]][[3]][[2]]),
+     Q_2018_2015_t = ifelse(split == 1, Q_fns[[2]][[4]][[1]], Q_fns[[2]][[4]][[2]]),
+     Q_2018_2014_t = ifelse(split == 1, Q_fns[[2]][[5]][[1]], Q_fns[[2]][[5]][[2]]),
+     Q_2018_2013_t = ifelse(split == 1, Q_fns[[2]][[6]][[1]], Q_fns[[2]][[6]][[2]]),
      # Q-functions for end year = 2017
-     Q_2017_2017_t = ifelse(split == 1, Q_fns[[4]][[1]][[1]], Q_fns[[4]][[1]][[2]]),
-     Q_2017_2016_t = ifelse(split == 1, Q_fns[[4]][[2]][[1]], Q_fns[[4]][[2]][[2]]),
-     Q_2017_2015_t = ifelse(split == 1, Q_fns[[4]][[3]][[1]], Q_fns[[4]][[3]][[2]]),
-     Q_2017_2014_t = ifelse(split == 1, Q_fns[[4]][[4]][[1]], Q_fns[[4]][[4]][[2]]),
-     Q_2017_2013_t = ifelse(split == 1, Q_fns[[4]][[5]][[1]], Q_fns[[4]][[5]][[2]]),
-     # Q-functions for end year = 2016
-     Q_2016_2016_t = ifelse(split == 1, Q_fns[[5]][[1]][[1]], Q_fns[[5]][[1]][[2]]),
-     Q_2016_2015_t = ifelse(split == 1, Q_fns[[5]][[2]][[1]], Q_fns[[5]][[2]][[2]]),
-     Q_2016_2014_t = ifelse(split == 1, Q_fns[[5]][[3]][[1]], Q_fns[[5]][[3]][[2]]),
-     Q_2016_2013_t = ifelse(split == 1, Q_fns[[5]][[4]][[1]], Q_fns[[5]][[4]][[2]]),
+     Q_2017_2017_t = ifelse(split == 1, Q_fns[[3]][[1]][[1]], Q_fns[[3]][[1]][[2]]),
+     Q_2017_2016_t = ifelse(split == 1, Q_fns[[3]][[2]][[1]], Q_fns[[3]][[2]][[2]]),
+     Q_2017_2015_t = ifelse(split == 1, Q_fns[[3]][[3]][[1]], Q_fns[[3]][[3]][[2]]),
+     Q_2017_2014_t = ifelse(split == 1, Q_fns[[3]][[4]][[1]], Q_fns[[3]][[4]][[2]]),
+     Q_2017_2013_t = ifelse(split == 1, Q_fns[[3]][[5]][[1]], Q_fns[[3]][[5]][[2]]),
+     # Q-functions for end year = 201
+     Q_2016_2016_t = ifelse(split == 1, Q_fns[[4]][[1]][[1]], Q_fns[[4]][[1]][[2]]),
+     Q_2016_2015_t = ifelse(split == 1, Q_fns[[4]][[2]][[1]], Q_fns[[4]][[2]][[2]]),
+     Q_2016_2014_t = ifelse(split == 1, Q_fns[[4]][[3]][[1]], Q_fns[[4]][[3]][[2]]),
+     Q_2016_2013_t = ifelse(split == 1, Q_fns[[4]][[4]][[1]], Q_fns[[4]][[4]][[2]]),
      # Q-functions for end year = 2015
-     Q_2015_2015_t = ifelse(split == 1, Q_fns[[6]][[1]][[1]], Q_fns[[6]][[1]][[2]]),
-     Q_2015_2014_t = ifelse(split == 1, Q_fns[[6]][[2]][[1]], Q_fns[[6]][[2]][[2]]),
-     Q_2015_2013_t = ifelse(split == 1, Q_fns[[6]][[3]][[1]], Q_fns[[6]][[3]][[2]]),
+     Q_2015_2015_t = ifelse(split == 1, Q_fns[[5]][[1]][[1]], Q_fns[[5]][[1]][[2]]),
+     Q_2015_2014_t = ifelse(split == 1, Q_fns[[5]][[2]][[1]], Q_fns[[5]][[2]][[2]]),
+     Q_2015_2013_t = ifelse(split == 1, Q_fns[[5]][[3]][[1]], Q_fns[[5]][[3]][[2]]),
      # Q-functions for end year = 2014
-     Q_2014_2014_t = ifelse(split == 1, Q_fns[[7]][[1]][[1]], Q_fns[[7]][[1]][[2]]),
-     Q_2014_2013_t = ifelse(split == 1, Q_fns[[7]][[2]][[1]], Q_fns[[7]][[2]][[2]]),
+     Q_2014_2014_t = ifelse(split == 1, Q_fns[[6]][[1]][[1]], Q_fns[[6]][[1]][[2]]),
+     Q_2014_2013_t = ifelse(split == 1, Q_fns[[6]][[2]][[1]], Q_fns[[6]][[2]][[2]]),
      # Q-functions for end year = 2013
-     Q_2013_2013_t = ifelse(split == 1, Q_fns[[8]][[1]][[1]], Q_fns[[8]][[1]][[2]]),
+     Q_2013_2013_t = ifelse(split == 1, Q_fns[[7]][[1]][[1]], Q_fns[[7]][[1]][[2]]),
      # Q-functions (lower bound) for end year = 2020
-     Q_2020_2020_min_t = ifelse(split == 1, Q_min_fns[[1]][[1]][[1]], Q_min_fns[[1]][[1]][[2]]),
-     Q_2020_2019_min_t = ifelse(split == 1, Q_min_fns[[1]][[2]][[1]], Q_min_fns[[1]][[2]][[2]]),
-     Q_2020_2018_min_t = ifelse(split == 1, Q_min_fns[[1]][[3]][[1]], Q_min_fns[[1]][[3]][[2]]),
-     Q_2020_2017_min_t = ifelse(split == 1, Q_min_fns[[1]][[4]][[1]], Q_min_fns[[1]][[4]][[2]]),
-     Q_2020_2016_min_t = ifelse(split == 1, Q_min_fns[[1]][[5]][[1]], Q_min_fns[[1]][[5]][[2]]),
-     Q_2020_2015_min_t = ifelse(split == 1, Q_min_fns[[1]][[6]][[1]], Q_min_fns[[1]][[6]][[2]]),
-     Q_2020_2014_min_t = ifelse(split == 1, Q_min_fns[[1]][[7]][[1]], Q_min_fns[[1]][[7]][[2]]),
-     Q_2020_2013_min_t = ifelse(split == 1, Q_min_fns[[1]][[8]][[1]], Q_min_fns[[1]][[8]][[2]]),
+     # Q_2020_2020_min_t = ifelse(split == 1, Q_min_fns[[1]][[1]][[1]], Q_min_fns[[1]][[1]][[2]]),
+     # Q_2020_2019_min_t = ifelse(split == 1, Q_min_fns[[1]][[2]][[1]], Q_min_fns[[1]][[2]][[2]]),
+     # Q_2020_2018_min_t = ifelse(split == 1, Q_min_fns[[1]][[3]][[1]], Q_min_fns[[1]][[3]][[2]]),
+     # Q_2020_2017_min_t = ifelse(split == 1, Q_min_fns[[1]][[4]][[1]], Q_min_fns[[1]][[4]][[2]]),
+     # Q_2020_2016_min_t = ifelse(split == 1, Q_min_fns[[1]][[5]][[1]], Q_min_fns[[1]][[5]][[2]]),
+     # Q_2020_2015_min_t = ifelse(split == 1, Q_min_fns[[1]][[6]][[1]], Q_min_fns[[1]][[6]][[2]]),
+     # Q_2020_2014_min_t = ifelse(split == 1, Q_min_fns[[1]][[7]][[1]], Q_min_fns[[1]][[7]][[2]]),
+     # Q_2020_2013_min_t = ifelse(split == 1, Q_min_fns[[1]][[8]][[1]], Q_min_fns[[1]][[8]][[2]]),
      # Q-functions (lower bound) for end year = 2019
-     Q_2019_2019_min_t = ifelse(split == 1, Q_min_fns[[2]][[1]][[1]], Q_min_fns[[2]][[1]][[2]]),
-     Q_2019_2018_min_t = ifelse(split == 1, Q_min_fns[[2]][[2]][[1]], Q_min_fns[[2]][[2]][[2]]),
-     Q_2019_2017_min_t = ifelse(split == 1, Q_min_fns[[2]][[3]][[1]], Q_min_fns[[2]][[3]][[2]]),
-     Q_2019_2016_min_t = ifelse(split == 1, Q_min_fns[[2]][[4]][[1]], Q_min_fns[[2]][[4]][[2]]),
-     Q_2019_2015_min_t = ifelse(split == 1, Q_min_fns[[2]][[5]][[1]], Q_min_fns[[2]][[5]][[2]]),
-     Q_2019_2014_min_t = ifelse(split == 1, Q_min_fns[[2]][[6]][[1]], Q_min_fns[[2]][[6]][[2]]),
-     Q_2019_2013_min_t = ifelse(split == 1, Q_min_fns[[2]][[7]][[1]], Q_min_fns[[2]][[7]][[2]]),
+     Q_2019_2019_min_t = ifelse(split == 1, Q_min_fns[[1]][[1]][[1]], Q_min_fns[[1]][[1]][[2]]),
+     Q_2019_2018_min_t = ifelse(split == 1, Q_min_fns[[1]][[2]][[1]], Q_min_fns[[1]][[2]][[2]]),
+     Q_2019_2017_min_t = ifelse(split == 1, Q_min_fns[[1]][[3]][[1]], Q_min_fns[[1]][[3]][[2]]),
+     Q_2019_2016_min_t = ifelse(split == 1, Q_min_fns[[1]][[4]][[1]], Q_min_fns[[1]][[4]][[2]]),
+     Q_2019_2015_min_t = ifelse(split == 1, Q_min_fns[[1]][[5]][[1]], Q_min_fns[[1]][[5]][[2]]),
+     Q_2019_2014_min_t = ifelse(split == 1, Q_min_fns[[1]][[6]][[1]], Q_min_fns[[1]][[6]][[2]]),
+     Q_2019_2013_min_t = ifelse(split == 1, Q_min_fns[[1]][[7]][[1]], Q_min_fns[[1]][[7]][[2]]),
      # Q-functions (lower bound) for end year = 2018
-     Q_2018_2018_min_t = ifelse(split == 1, Q_min_fns[[3]][[1]][[1]], Q_min_fns[[3]][[1]][[2]]),
-     Q_2018_2017_min_t = ifelse(split == 1, Q_min_fns[[3]][[2]][[1]], Q_min_fns[[3]][[2]][[2]]),
-     Q_2018_2016_min_t = ifelse(split == 1, Q_min_fns[[3]][[3]][[1]], Q_min_fns[[3]][[3]][[2]]),
-     Q_2018_2015_min_t = ifelse(split == 1, Q_min_fns[[3]][[4]][[1]], Q_min_fns[[3]][[4]][[2]]),
-     Q_2018_2014_min_t = ifelse(split == 1, Q_min_fns[[3]][[5]][[1]], Q_min_fns[[3]][[5]][[2]]),
-     Q_2018_2013_min_t = ifelse(split == 1, Q_min_fns[[3]][[6]][[1]], Q_min_fns[[3]][[6]][[2]]),
+     Q_2018_2018_min_t = ifelse(split == 1, Q_min_fns[[2]][[1]][[1]], Q_min_fns[[2]][[1]][[2]]),
+     Q_2018_2017_min_t = ifelse(split == 1, Q_min_fns[[2]][[2]][[1]], Q_min_fns[[2]][[2]][[2]]),
+     Q_2018_2016_min_t = ifelse(split == 1, Q_min_fns[[2]][[3]][[1]], Q_min_fns[[2]][[3]][[2]]),
+     Q_2018_2015_min_t = ifelse(split == 1, Q_min_fns[[2]][[4]][[1]], Q_min_fns[[2]][[4]][[2]]),
+     Q_2018_2014_min_t = ifelse(split == 1, Q_min_fns[[2]][[5]][[1]], Q_min_fns[[2]][[5]][[2]]),
+     Q_2018_2013_min_t = ifelse(split == 1, Q_min_fns[[2]][[6]][[1]], Q_min_fns[[2]][[6]][[2]]),
      # Q-functions (lower bound) for end year = 2017
-     Q_2017_2017_min_t = ifelse(split == 1, Q_min_fns[[4]][[1]][[1]], Q_min_fns[[4]][[1]][[2]]),
-     Q_2017_2016_min_t = ifelse(split == 1, Q_min_fns[[4]][[2]][[1]], Q_min_fns[[4]][[2]][[2]]),
-     Q_2017_2015_min_t = ifelse(split == 1, Q_min_fns[[4]][[3]][[1]], Q_min_fns[[4]][[3]][[2]]),
-     Q_2017_2014_min_t = ifelse(split == 1, Q_min_fns[[4]][[4]][[1]], Q_min_fns[[4]][[4]][[2]]),
-     Q_2017_2013_min_t = ifelse(split == 1, Q_min_fns[[4]][[5]][[1]], Q_min_fns[[4]][[5]][[2]]),
+     Q_2017_2017_min_t = ifelse(split == 1, Q_min_fns[[3]][[1]][[1]], Q_min_fns[[3]][[1]][[2]]),
+     Q_2017_2016_min_t = ifelse(split == 1, Q_min_fns[[3]][[2]][[1]], Q_min_fns[[3]][[2]][[2]]),
+     Q_2017_2015_min_t = ifelse(split == 1, Q_min_fns[[3]][[3]][[1]], Q_min_fns[[3]][[3]][[2]]),
+     Q_2017_2014_min_t = ifelse(split == 1, Q_min_fns[[3]][[4]][[1]], Q_min_fns[[3]][[4]][[2]]),
+     Q_2017_2013_min_t = ifelse(split == 1, Q_min_fns[[3]][[5]][[1]], Q_min_fns[[3]][[5]][[2]]),
      # Q-functions (lower bound) for end year = 2016
-     Q_2016_2016_min_t = ifelse(split == 1, Q_min_fns[[5]][[1]][[1]], Q_min_fns[[5]][[1]][[2]]),
-     Q_2016_2015_min_t = ifelse(split == 1, Q_min_fns[[5]][[2]][[1]], Q_min_fns[[5]][[2]][[2]]),
-     Q_2016_2014_min_t = ifelse(split == 1, Q_min_fns[[5]][[3]][[1]], Q_min_fns[[5]][[3]][[2]]),
-     Q_2016_2013_min_t = ifelse(split == 1, Q_min_fns[[5]][[4]][[1]], Q_min_fns[[5]][[4]][[2]]),
+     Q_2016_2016_min_t = ifelse(split == 1, Q_min_fns[[4]][[1]][[1]], Q_min_fns[[4]][[1]][[2]]),
+     Q_2016_2015_min_t = ifelse(split == 1, Q_min_fns[[4]][[2]][[1]], Q_min_fns[[4]][[2]][[2]]),
+     Q_2016_2014_min_t = ifelse(split == 1, Q_min_fns[[4]][[3]][[1]], Q_min_fns[[4]][[3]][[2]]),
+     Q_2016_2013_min_t = ifelse(split == 1, Q_min_fns[[4]][[4]][[1]], Q_min_fns[[4]][[4]][[2]]),
      # Q-functions (lower bound) for end year = 2015
-     Q_2015_2015_min_t = ifelse(split == 1, Q_min_fns[[6]][[1]][[1]], Q_min_fns[[6]][[1]][[2]]),
-     Q_2015_2014_min_t = ifelse(split == 1, Q_min_fns[[6]][[2]][[1]], Q_min_fns[[6]][[2]][[2]]),
-     Q_2015_2013_min_t = ifelse(split == 1, Q_min_fns[[6]][[3]][[1]], Q_min_fns[[6]][[3]][[2]]),
+     Q_2015_2015_min_t = ifelse(split == 1, Q_min_fns[[5]][[1]][[1]], Q_min_fns[[5]][[1]][[2]]),
+     Q_2015_2014_min_t = ifelse(split == 1, Q_min_fns[[5]][[2]][[1]], Q_min_fns[[5]][[2]][[2]]),
+     Q_2015_2013_min_t = ifelse(split == 1, Q_min_fns[[5]][[3]][[1]], Q_min_fns[[5]][[3]][[2]]),
      # Q-functions (lower bound) for end year = 2014
-     Q_2014_2014_min_t = ifelse(split == 1, Q_min_fns[[7]][[1]][[1]], Q_min_fns[[7]][[1]][[2]]),
-     Q_2014_2013_min_t = ifelse(split == 1, Q_min_fns[[7]][[2]][[1]], Q_min_fns[[7]][[2]][[2]]),
+     Q_2014_2014_min_t = ifelse(split == 1, Q_min_fns[[6]][[1]][[1]], Q_min_fns[[6]][[1]][[2]]),
+     Q_2014_2013_min_t = ifelse(split == 1, Q_min_fns[[6]][[2]][[1]], Q_min_fns[[6]][[2]][[2]]),
      # G-functions
-     g2020 = ifelse(split == 1, g_fns[[1]][[1]], g_fns[[1]][[2]]),
-     g2019 = ifelse(split == 1, g_fns[[2]][[1]], g_fns[[2]][[2]]),
-     g2018 = ifelse(split == 1, g_fns[[3]][[1]], g_fns[[3]][[2]]),
-     g2017 = ifelse(split == 1, g_fns[[4]][[1]], g_fns[[4]][[2]]),
-     g2016 = ifelse(split == 1, g_fns[[5]][[1]], g_fns[[5]][[2]]),
-     g2015 = ifelse(split == 1, g_fns[[6]][[1]], g_fns[[6]][[2]]),
-     g2014 = ifelse(split == 1, g_fns[[7]][[1]], g_fns[[7]][[2]])
+     # g2020 = ifelse(split == 1, g_fns[[1]][[1]], g_fns[[1]][[2]]),
+     g2019 = ifelse(split == 1, g_fns[[1]][[1]], g_fns[[1]][[2]]),
+     g2018 = ifelse(split == 1, g_fns[[2]][[1]], g_fns[[2]][[2]]),
+     g2017 = 1,
+     g2016 = ifelse(split == 1, g_fns[[3]][[1]], g_fns[[3]][[2]]),
+     g2015 = ifelse(split == 1, g_fns[[4]][[1]], g_fns[[4]][[2]]),
+     g2014 = 1
          )
 
 df_eif <- df_eif %>% repair_g
 
 df_eif <- df_eif %>% calc_if()
 
-res <- df_eif %>% summarise(across(psi2014:psi2020, list(est=mean, var=~var(.)/n()))) %>% 
+res <- df_eif %>% summarise(across(psi2014:psi2019, list(est=mean, var=~var(.)/n()))) %>% 
   data.frame
 
-
-res %>% 
-  select(ends_with("_est")) %>% unlist
+table(temp$exposure, temp$year)
 
 #------------------------------------------------------------------------------#
 # Section 2. Plot Outcomes
