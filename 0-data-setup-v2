@@ -1,0 +1,235 @@
+#==============================================================================#
+# Nick Illenberger
+# June 5, 2023
+#
+# Difference-in-difference data analysis
+#   1. Setup
+#       - Read in data and prepare for analysis
+#   2. Analysis
+#       - Descriptive Characteristics
+#       - Fit nuisance functions
+#   3. Reporting
+#
+# Our goal in this analysis is to estimate the effects of minimum wage increases
+# on self-reported health. Specifically, we ask the question, what would
+# self-reported health outcomes look like if every US state had had a minimum
+# wage at least as high as NYS minimum wage
+#
+# Outcome of interest: 
+#   -Self-rated health for individual, i, in state, s, at time, t
+# Exposure:
+#   - Lagged, state-level minimum wage
+# Covariates:
+#   - State-level: maximum temporary assistance for needy families, maximum SNAP,
+#       state earned income tax credit, unemployment rate, average hourly wage,
+#       per-capita personal income
+#   - Individual-level: age, race, educational attainment
+#
+# References:
+#   The effects of recent minimum wage increases on self-reported health in the
+#     United States
+#==============================================================================#
+
+#------------------------------------------------------------------------------#
+# 1. Setup
+#------------------------------------------------------------------------------#
+
+# Set working directory:
+setwd("/Users/illenn01/Library/CloudStorage/OneDrive-NYULangoneHealth/DID")
+
+# Required Packages:
+library(SuperLearner)
+library(tidyverse)
+library(tidycensus)
+library(readxl)
+library(gghighlight)
+library(haven)
+
+#-------------------------------
+# Read in and combine all data:
+#-------------------------------
+
+# Minimum Wage data
+mw_state_annual <- read_xlsx("data/mw_state_annual.xlsx")%>% 
+  rename(year = Year,
+         state = `State FIPS Code`,
+         state_abv = `State Abbreviation`,
+         annual_fed_min = `Annual Federal Minimum`,
+         annual_state_min = `Annual State Minimum`,
+         annual_fed_avg = `Annual Federal Average`,
+         annual_state_avg = `Annual State Average`) %>% 
+  mutate(annual_fed_mw_lag = lag(annual_fed_min, 1),
+         annual_state_mw_lag = lag(annual_state_min, 1),
+         annual_fed_mw_avg_lag = lag(annual_fed_avg, 1),
+         annual_state_mw_avg_lag = lag(annual_state_avg, 1)) %>% 
+  dplyr::select(state, state_abv, year, annual_state_min, annual_state_mw_lag) %>%
+  mutate(year = as.numeric(year)) %>% 
+  filter(year %in% 2012:2021)
+
+ny_mw_lag <- mw_state_annual[mw_state_annual$state_abv == "NY", "annual_state_mw_lag"] %>% 
+  unlist()
+
+mw_state_annual$ny_mw_lag <- rep(ny_mw_lag, times = length(unique(mw_state_annual$state)))
+
+mw_state_annual <- mw_state_annual %>% 
+  mutate(consistent = as.numeric(annual_state_mw_lag >= ny_mw_lag), 
+         count = year - 2011) %>% 
+  group_by(state) %>% 
+  mutate(cum_consistent = cumsum(consistent)) %>% 
+  ungroup(state) %>% 
+  mutate(exposure = as.numeric(cum_consistent == count)) %>% 
+  select(-consistent, -count, -cum_consistent) %>% 
+  print(n = 15)
+
+# Self-rated Health Outcome data
+# Outcome variable: genhlth
+#   Levels: 1) excellent, 2) very good, 3) good, 4) fair, 5) poor,
+#     7) Don't know/not sure, 9) refused
+# Binarize as 1-3, 4-5
+brfss <- read.csv("data/brfss_2013_to_2021.csv") %>% 
+  filter(!(genhlth %in% c(7, 9))) %>% 
+  mutate(genhlth_bin = as.numeric(genhlth %in% c(1, 2))) %>% 
+  filter(!(state %in% c(66, 72, 78)), year %in% 2013:2021)
+
+LLCP2013 <- read_xpt(file = "data/LLCP2013.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2014 <- read_xpt(file = "data/LLCP2014.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2015 <- read_xpt(file = "data/LLCP2015.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2016 <- read_xpt(file = "data/LLCP2016.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2017 <- read_xpt(file = "data/LLCP2017.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2018 <- read_xpt(file = "data/LLCP2018.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2019 <- read_xpt(file = "data/LLCP2019.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2020 <- read_xpt(file = "data/LLCP2020.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+LLCP2021 <- read_xpt(file = "data/LLCP2021.XPT")%>% 
+  rename(state = "_STATE",
+         year = "IYEAR",
+         psu = "_PSU",
+         survey_weight = "_LLCPWT") %>% 
+  select(state, year, psu, survey_weight)
+
+LLCP_DATA <- rbind(LLCP2013, LLCP2014, LLCP2015, LLCP2016,
+                   LLCP2017, LLCP2018, LLCP2019, LLCP2020,
+                   LLCP2021) %>% 
+  mutate(year = as.integer(year))
+
+# State-level characteristics
+state_data <- read.csv("data/state_level_data.csv") %>% 
+  filter(month == 1) %>% 
+  mutate(year = as.integer(year)) %>% 
+  rename(state_abv = state) %>% 
+  group_by(state_abv) %>% 
+  mutate(mw_lag = lag(mw))
+
+# Merge LLCP data with BRFSS data (add weights)
+work <- brfss %>% 
+  left_join(LLCP_DATA, by = c("state", "year", "psu"))
+
+# Merge MW information with Working Data
+work <- work %>%
+  left_join(mw_state_annual, by = c("state", "year"))
+
+# Merge State data with Working Data
+work <- work %>% 
+  left_join(state_data, by = c("state_abv", "year"))
+
+#---------------------------------
+# Collapse data by state and year:
+#---------------------------------
+
+work <- work %>% 
+  select(state, state_abv, exposure, year, psu, sex, genhlth, genhlth_bin, educa, race, ageg,
+         survey_weight, mw, mw_lag, state_mw, fed_mw, pop, tanf, fs, eitc, uer,
+         percap_inc) %>% 
+  mutate(educag = case_when(educa %in% c(1,2,3) ~ 1, # Did not graduate High school,
+                            educa %in% c(4) ~ 2, # Graduated High School
+                            educa %in% c(5) ~ 3, # Attended college or technical school
+                            educa %in% c(6) ~ 4), #Graduated from college or technical school
+         age64 = case_when(ageg %in% c(1:9) ~ 1, # Under 64,
+                           ageg %in% c(10:13) ~ 2), # over 64
+         race = case_when(race %in% c(1) ~ 1, 
+                          race %in% c(2) ~ 2,
+                          race %in% c(3:8) ~ 3)) 
+
+work <- work %>% 
+  group_by(state, year) %>%
+  summarise(
+         # sex1_uw = mean(as.numeric(sex == 1)), # Sex == 1 -> male
+         # educag2_uw = mean(as.numeric(educag == 2), na.rm = T),
+         # educag3_uw = mean(as.numeric(educag == 3), na.rm = T),
+         # educag4_uw = mean(as.numeric(educag == 4), na.rm = T),
+         # race2_uw = mean(as.numeric(race == 2), na.rm = T),
+         # race3_uw = mean(as.numeric(race == 3), na.rm = T),
+         # age64ge_uw = weighted.mean(as.numeric(age64 == 2), na.rm = T),
+         state_abv = state_abv[1],
+         exposure = exposure[1],
+         exposure = exposure[1],
+         mw = mw[1],
+         state_mw = state_mw[1],
+         fed_mw = fed_mw[1],
+         pop = pop[1],
+         tanf = tanf[1],
+         fs = fs[1],
+         eitc = eitc[1],
+         uer = uer[1],
+         percap_inc = percap_inc[1],
+         genhlth = weighted.mean(as.numeric(genhlth),
+                                 w = survey_weight, na.rm = T),
+         genhlth_bin = weighted.mean(x = genhlth_bin,
+                                 w = survey_weight),
+         sex1 = weighted.mean(as.numeric(sex == 1),
+                              w = survey_weight, na.rm = T), # Sex == 1 -> male
+         educag2 = weighted.mean(as.numeric(educag == 2),
+                                 w = survey_weight, na.rm = T),
+         educag3 = weighted.mean(as.numeric(educag == 3),
+                                 w = survey_weight, na.rm = T),
+         educag4 = weighted.mean(as.numeric(educag == 4),
+                                 w = survey_weight, na.rm = T),
+         race2 = weighted.mean(as.numeric(race == 2),
+                               w = survey_weight, na.rm = T),
+         race3 = weighted.mean(as.numeric(race == 3),
+                               w = survey_weight, na.rm = T),
+         age64ge = weighted.mean(as.numeric(age64 == 2),
+                                 w = survey_weight, na.rm = T))
+
+
+saveRDS(object = work,
+        file = paste("data/brfss_working_", format(Sys.Date(), "%d%b%Y"), ".RDS", sep =""))
