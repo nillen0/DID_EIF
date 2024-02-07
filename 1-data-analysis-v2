@@ -454,6 +454,61 @@ for(i in 1:6) {
 # Years where exposure changes occur (all other years have probability of 1)
 year_set <- c(2019, 2018, 2016, 2015)
 
+# g_fns <- list()
+# for(i in 1:4) {
+#   
+#   year <- year_set[i]
+#   
+#   # outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
+#   
+#   form <- paste(c(paste("exposure_", year, sep = ""),
+#                      " ~ ",
+#                      paste(c(
+#                        # paste("exposure_", (year-1), sep = ""),
+#                        paste("tanf_", (year-1):(year-2), sep = ""),
+#                         paste("fs_", (year-1):(year-2), sep = ""),
+#                        # paste("eitc_", (year-1), sep = ""),
+#                         paste("uer_", (year-1):(year-2), sep = ""),
+#                        paste("percap_inc_", (year-1):(year-2), sep = ""),
+#                       1
+#                        ),
+#                            collapse  = " + ")),
+#                    collapse = "")
+#   
+#   # form <- paste(c(paste("exposure_", year, sep = ""),
+#   #                 " ~ 1"),
+#   #               collapse = "")
+#   
+#   fit_data <- work_wide[work_wide[, paste("exposure_", (year-1), sep = "")] == 1, ]
+#   
+#   g_fns[[i]] <- map(1:num_splits, function(s) {
+#     
+#     # fit <- glm(formula = form,
+#     #           data = fit_data %>% filter(split != s),
+#     #           family = binomial(link = "logit"))
+#     fit <- glm(formula = form,
+#                data = fit_data,
+#                family = binomial(link = "logit"))
+#     
+#     predict(fit,
+#             newdata = work_wide %>%
+#               select(paste("exposure_", (year-1), sep = ""),
+#                      paste("pop_", (year-1):(year-2), sep = ""),
+#                      paste("tanf_", (year-1):(year-2), sep = ""),
+#                      paste("fs_", (year-1):(year-2), sep = ""),
+#                      paste("eitc_", (year-1):(year-2), sep = ""),
+#                      paste("uer_", (year-1):(year-2), sep = ""),
+#                      paste("percap_inc_", (year-1):(year-2), sep = "")) %>%
+#               mutate(across(starts_with('exposure_'), ~ 1)),
+#             type = "response") %>% unlist
+#     
+#   })
+#   
+#   
+# }
+
+
+
 g_fns <- list()
 for(i in 1:4) {
   
@@ -461,40 +516,54 @@ for(i in 1:4) {
   
   # outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
   
-  form <- paste(c(paste("exposure_", year, sep = ""),
-                     " ~ ",
-                     paste(c(paste("exposure_", (year-1), sep = ""),
-                             paste("tanf_", (year-1), sep = ""),
-                             paste("fs_", (year-1), sep = ""),
-                             paste("eitc_", (year-1), sep = ""),
-                             paste("uer_", (year-1), sep = ""),
-                             paste("percap_inc_", (year-1), sep = "")),
-                           collapse  = " + ")),
-                   collapse = "")
-  
-  form <- paste(c(paste("exposure_", year, sep = ""),
-                  " ~ 1"),
-                collapse = "")
+  vars <- c(
+    # paste("exposure_", (year-1), sep = ""),
+    paste("tanf_", (year-1):2013, sep = ""),
+    paste("fs_", (year-1):2013, sep = ""),
+    # paste("eitc_", (year-1), sep = ""),
+    paste("uer_", (year-1):2013, sep = ""),
+    paste("percap_inc_", (year-1):2013, sep = ""))
   
   fit_data <- work_wide[work_wide[, paste("exposure_", (year-1), sep = "")] == 1, ]
   
   g_fns[[i]] <- map(1:num_splits, function(s) {
     
-    fit <- glm(formula = form,
-              data = fit_data %>% filter(split != s),
-              family = binomial(link = "logit"))
+    y_out <- fit_data[, paste("exposure_", (year), sep = "")] %>% unlist
+    glmnet_fit <- glmnet::glmnet(y = y_out ,
+                                    x = fit_data %>% 
+                                      select(all_of(vars)) %>% 
+                                      as.matrix,
+                                    family = binomial(link = "logit"),
+                                 alpha = 1)
     
-    predict(fit,
-            newdata = work_wide %>%
+    preds <- predict(glmnet_fit,
+            newx = fit_data %>%
               select(paste("exposure_", (year-1), sep = ""),
-                     paste("pop_", (year-1), sep = ""),
-                     paste("tanf_", (year-1), sep = ""),
-                     paste("fs_", (year-1), sep = ""),
-                     paste("eitc_", (year-1), sep = ""),
-                     paste("uer_", (year-1), sep = ""),
-                     paste("percap_inc_", (year-1), sep = "")) %>%
-              mutate(across(starts_with('exposure_'), ~ 1)),
-            type = "response") %>% unlist
+                     paste("pop_", (year-1):2013, sep = ""),
+                     paste("tanf_", (year-1):2013, sep = ""),
+                     paste("fs_", (year-1):2013, sep = ""),
+                     paste("eitc_", (year-1):2013, sep = ""),
+                     paste("uer_", (year-1):2013, sep = ""),
+                     paste("percap_inc_", (year-1):2013, sep = "")) %>%
+              mutate(across(starts_with('exposure_'), ~ 1)) %>% select(all_of(vars)) %>% 
+              as.matrix,
+            type = "response")
+    
+    index <- apply(y_out - preds, 2, mean) %>% which.min
+    
+    
+    predict(glmnet_fit,
+            newx = work_wide %>%
+              select(paste("exposure_", (year-1), sep = ""),
+                     paste("pop_", (year-1):2013, sep = ""),
+                     paste("tanf_", (year-1):2013, sep = ""),
+                     paste("fs_", (year-1):2013, sep = ""),
+                     paste("eitc_", (year-1):2013, sep = ""),
+                     paste("uer_", (year-1):2013, sep = ""),
+                     paste("percap_inc_", (year-1):2013, sep = "")) %>%
+              mutate(across(starts_with('exposure_'), ~ 1)) %>% select(all_of(vars)) %>% 
+              as.matrix,
+            type = "response")[,index]
     
   })
   
