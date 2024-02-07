@@ -642,8 +642,13 @@ plot_res <- res %>%
 
 
 plot_res %>% 
+  filter(year != 2013) %>% 
+  mutate(lwr = est - 1.96*se,
+         upr = est + 1.96*se) %>% 
   ggplot(aes(x = year, y = est)) +
-    geom_line(aes(lty = label)) +
+    geom_line(aes(color = label)) +
+    geom_ribbon(aes(ymin=lwr,ymax=upr, fill = label), alpha=0.1) +
+    geom_ribbon(aes(ymin=lwr,ymax=upr, color = label), alpha=0.0) +
   ylab("Proportion with Excellent or Very Good (Self-Rated)") +
   xlab("Year") +
   labs(lty = "Group") +
