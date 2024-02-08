@@ -237,26 +237,6 @@ write.table(table(temp$exposure, temp$year),
 # (3) 2017 -> 2018,
 # (4) 2018 -> 2019
 
-# Plot of proportion with self-rated health of fair or poor
-# pdf("figures/self_rated_health.pdf",
-#     paste("figures/self_rated_health_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
-# work %>%
-#   mutate(exposure = as.factor(exposure)) %>% 
-#   group_by(exposure, year) %>%
-#   summarise(health = mean(genhlth_bin, na.rm = T),
-#             n = n()) %>%
-#   ggplot(aes(x = year, y = health)) +
-#   geom_line(aes(lty = exposure)) +
-#   geom_point(size = 1)+
-#   ylab("Proportion with Excellent or Very Good (Self-Rated)") +
-#   xlab("Year") +
-#   theme_classic() +
-#   scale_colour_grey(start = 0.8, end = 0.9) +
-#   scale_x_continuous(breaks=2013:2021) +
-#   labs(col = "Consistent")
-# dev.off()
-
-
 pdf("figures/self_rated_health.pdf",
     paste("figures/self_rated_health_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
 work %>%
@@ -310,8 +290,8 @@ work_wide <- work_wide %>% ungroup(state)
 # Define Learners
 #------------------
 
-learners_q <- c("SL.mean", "SL.ranger", "SL.earth")
-learners_g <- c("SL.mean", "SL.lm", "SL.glmnet")
+learners_q <- c("SL.mean", "SL.glmnet", "SL.ranger", "SL.earth")
+learners_g <- c("SL.mean", "SL.ranger", "SL.glmnet", "SL.glm")
 
 #-----------------------
 # Train/Evaluation Split
@@ -360,7 +340,15 @@ for(i in 1:7) {
                                                         paste("fs_", 2013:year_2, sep = ""),
                                                         paste("eitc_", 2013:year_2, sep = ""),
                                                         paste("uer_", 2013:year_2, sep = ""),
-                                                        paste("percap_inc_", 2013:year_2, sep = "")))
+                                                        paste("percap_inc_", 2013:year_2, sep = ""),
+                                                        paste("sex1_", 2013:year_2, sep = ""),
+                                                        paste("educag2_", 2013:year_2, sep = ""),
+                                                        paste("educag3_", 2013:year_2, sep = ""),
+                                                        paste("educag4_", 2013:year_2, sep = ""),
+                                                        paste("race2_", 2013:year_2, sep = ""),
+                                                        paste("race3_", 2013:year_2, sep = ""),
+                                                        paste("age64ge_", 2013:year_2, sep = ""),
+                                                        ))
       
       
     } else {
@@ -378,7 +366,15 @@ for(i in 1:7) {
                                                         paste("fs_", 2013:year_2, sep = ""),
                                                         paste("eitc_", 2013:year_2, sep = ""),
                                                         paste("uer_", 2013:year_2, sep = ""),
-                                                        paste("percap_inc_", 2013:year_2, sep = "")))
+                                                        paste("percap_inc_", 2013:year_2, sep = ""),
+                                                        paste("sex1_", 2013:year_2, sep = ""),
+                                                        paste("educag2_", 2013:year_2, sep = ""),
+                                                        paste("educag3_", 2013:year_2, sep = ""),
+                                                        paste("educag4_", 2013:year_2, sep = ""),
+                                                        paste("race2_", 2013:year_2, sep = ""),
+                                                        paste("race3_", 2013:year_2, sep = ""),
+                                                        paste("age64ge_", 2013:year_2, sep = ""),
+      ))
       
     }
     
@@ -419,7 +415,15 @@ for(i in 1:6) {
                                                           paste("fs_", 2013:year_2, sep = ""),
                                                           paste("eitc_", 2013:year_2, sep = ""),
                                                           paste("uer_", 2013:year_2, sep = ""),
-                                                          paste("percap_inc_", 2013:year_2, sep = "")))
+                                                          paste("percap_inc_", 2013:year_2, sep = ""),
+                                                          paste("sex1_", 2013:year_2, sep = ""),
+                                                          paste("educag2_", 2013:year_2, sep = ""),
+                                                          paste("educag3_", 2013:year_2, sep = ""),
+                                                          paste("educag4_", 2013:year_2, sep = ""),
+                                                          paste("race2_", 2013:year_2, sep = ""),
+                                                          paste("race3_", 2013:year_2, sep = ""),
+                                                          paste("age64ge_", 2013:year_2, sep = ""),
+      ))
       
       
     } else {
@@ -437,7 +441,15 @@ for(i in 1:6) {
                                                           paste("fs_", 2013:year_2, sep = ""),
                                                           paste("eitc_", 2013:year_2, sep = ""),
                                                           paste("uer_", 2013:year_2, sep = ""),
-                                                          paste("percap_inc_", 2013:year_2, sep = "")))
+                                                          paste("percap_inc_", 2013:year_2, sep = ""),
+                                                          paste("sex1_", 2013:year_2, sep = ""),
+                                                          paste("educag2_", 2013:year_2, sep = ""),
+                                                          paste("educag3_", 2013:year_2, sep = ""),
+                                                          paste("educag4_", 2013:year_2, sep = ""),
+                                                          paste("race2_", 2013:year_2, sep = ""),
+                                                          paste("race3_", 2013:year_2, sep = ""),
+                                                          paste("age64ge_", 2013:year_2, sep = ""),
+      ))
       
     }
     
@@ -454,128 +466,85 @@ for(i in 1:6) {
 # Years where exposure changes occur (all other years have probability of 1)
 year_set <- c(2019, 2018, 2016, 2015)
 
-# g_fns <- list()
-# for(i in 1:4) {
-#   
-#   year <- year_set[i]
-#   
-#   # outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
-#   
-#   form <- paste(c(paste("exposure_", year, sep = ""),
-#                      " ~ ",
-#                      paste(c(
-#                        # paste("exposure_", (year-1), sep = ""),
-#                        paste("tanf_", (year-1):(year-2), sep = ""),
-#                         paste("fs_", (year-1):(year-2), sep = ""),
-#                        # paste("eitc_", (year-1), sep = ""),
-#                         paste("uer_", (year-1):(year-2), sep = ""),
-#                        paste("percap_inc_", (year-1):(year-2), sep = ""),
-#                       1
-#                        ),
-#                            collapse  = " + ")),
-#                    collapse = "")
-#   
-#   # form <- paste(c(paste("exposure_", year, sep = ""),
-#   #                 " ~ 1"),
-#   #               collapse = "")
-#   
-#   fit_data <- work_wide[work_wide[, paste("exposure_", (year-1), sep = "")] == 1, ]
-#   
-#   g_fns[[i]] <- map(1:num_splits, function(s) {
-#     
-#     # fit <- glm(formula = form,
-#     #           data = fit_data %>% filter(split != s),
-#     #           family = binomial(link = "logit"))
-#     fit <- glm(formula = form,
-#                data = fit_data,
-#                family = binomial(link = "logit"))
-#     
-#     predict(fit,
-#             newdata = work_wide %>%
-#               select(paste("exposure_", (year-1), sep = ""),
-#                      paste("pop_", (year-1):(year-2), sep = ""),
-#                      paste("tanf_", (year-1):(year-2), sep = ""),
-#                      paste("fs_", (year-1):(year-2), sep = ""),
-#                      paste("eitc_", (year-1):(year-2), sep = ""),
-#                      paste("uer_", (year-1):(year-2), sep = ""),
-#                      paste("percap_inc_", (year-1):(year-2), sep = "")) %>%
-#               mutate(across(starts_with('exposure_'), ~ 1)),
-#             type = "response") %>% unlist
-#     
-#   })
-#   
-#   
-# }
+# Assume same g-model at all time points based on previous year data
+# Format data for this analysis, go long!
+work$split <- rep(work_wide$split, each = 7)
+test <- work %>% 
+  group_by(state) %>% 
+  mutate(exposure_prev = lag(exposure, 1),
+         pop_prev = lag(pop, 1),
+         tanf_prev = lag(tanf, 1),
+         fs_prev = lag(fs, 1),
+         eitc_prev = lag(eitc, 1),
+         uer_prev = lag(uer, 1),
+         percap_inc_prev = lag(percap_inc, 1),
+         sex1_prev = lag(sex1, 1),
+         educag2_prev = lag(educag2, 1),
+         educag3_prev = lag(educag3, 1),
+         educag4_prev = lag(educag4, 1),
+         race2_prev = lag(race2, 1),
+         race3_prev = lag(race3, 1),
+         age64ge_prev = lag(age64ge, 1)) %>% 
+  filter(year %in% year_set) %>% 
+  filter(exposure_prev == 1) %>% 
+  arrange(year) %>% 
+  ungroup(state)
+
+vars <- c(
+  "pop_prev",
+  "tanf_prev",
+  "fs_prev",
+  "eitc_prev",
+  "uer_prev",
+  "percap_inc_prev",
+  "sex1_prev",
+  "educag2_prev",
+  "educag3_prev",
+  "educag4_prev",
+  "race2_prev",
+  "race3_prev",
+  "age64ge_prev"
+  )
 
 
+g_fns <- map(1:num_splits, function(s) {
+  
+  SuperLearner(Y = test %>% filter(split == s) %>% select(exposure) %>% unlist,
+               X = test %>% 
+                 filter(split == s) %>% 
+                 select(all_of(vars)),
+               family = binomial,
+               SL.library = learners_g,
+               newX = test %>% select(all_of(vars)))$SL.predict
+  
+})
 
-g_fns <- list()
-for(i in 1:4) {
-  
-  year <- year_set[i]
-  
-  # outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
-  
-  vars <- c(
-    # paste("exposure_", (year-1), sep = ""),
-    paste("tanf_", (year-1):2013, sep = ""),
-    paste("fs_", (year-1):2013, sep = ""),
-    # paste("eitc_", (year-1), sep = ""),
-    paste("uer_", (year-1):2013, sep = ""),
-    paste("percap_inc_", (year-1):2013, sep = ""))
-  
-  fit_data <- work_wide[work_wide[, paste("exposure_", (year-1), sep = "")] == 1, ]
-  
-  g_fns[[i]] <- map(1:num_splits, function(s) {
-    
-    y_out <- fit_data[, paste("exposure_", (year), sep = "")] %>% unlist
-    glmnet_fit <- glmnet::glmnet(y = y_out ,
-                                    x = fit_data %>% 
-                                      select(all_of(vars)) %>% 
-                                      as.matrix,
-                                    family = binomial(link = "logit"),
-                                 alpha = 1)
-    
-    preds <- predict(glmnet_fit,
-            newx = fit_data %>%
-              select(paste("exposure_", (year-1), sep = ""),
-                     paste("pop_", (year-1):2013, sep = ""),
-                     paste("tanf_", (year-1):2013, sep = ""),
-                     paste("fs_", (year-1):2013, sep = ""),
-                     paste("eitc_", (year-1):2013, sep = ""),
-                     paste("uer_", (year-1):2013, sep = ""),
-                     paste("percap_inc_", (year-1):2013, sep = "")) %>%
-              mutate(across(starts_with('exposure_'), ~ 1)) %>% select(all_of(vars)) %>% 
-              as.matrix,
-            type = "response")
-    
-    index <- apply(y_out - preds, 2, mean) %>% which.min
-    
-    
-    predict(glmnet_fit,
-            newx = work_wide %>%
-              select(paste("exposure_", (year-1), sep = ""),
-                     paste("pop_", (year-1):2013, sep = ""),
-                     paste("tanf_", (year-1):2013, sep = ""),
-                     paste("fs_", (year-1):2013, sep = ""),
-                     paste("eitc_", (year-1):2013, sep = ""),
-                     paste("uer_", (year-1):2013, sep = ""),
-                     paste("percap_inc_", (year-1):2013, sep = "")) %>%
-              mutate(across(starts_with('exposure_'), ~ 1)) %>% select(all_of(vars)) %>% 
-              as.matrix,
-            type = "response")[,index]
-    
-  })
-  
-  
-}
+test$g_s1 <- g_fns[[1]][,1]
+test$g_s2 <- g_fns[[2]][,1]
 
+test <- test %>% 
+  select(state, year, g_s1, g_s2, split) %>% 
+  pivot_wider(names_from = year,
+              values_from = g_s1:g_s2) 
+  
+
+
+work_wide <- work_wide %>% 
+  left_join(test %>% select(-split), by = "state") %>% 
+  mutate(g_s1_2015 = ifelse(is.na(g_s1_2015), 0, g_s1_2015),
+         g_s2_2015 = ifelse(is.na(g_s2_2015), 0, g_s2_2015),
+         g_s1_2016 = ifelse(is.na(g_s1_2016), 0, g_s1_2016),
+         g_s2_2016 = ifelse(is.na(g_s2_2016), 0, g_s2_2016),
+         g_s1_2018 = ifelse(is.na(g_s1_2018), 0, g_s1_2018),
+         g_s2_2018 = ifelse(is.na(g_s2_2018), 0, g_s2_2018),
+         g_s1_2019 = ifelse(is.na(g_s1_2019), 0, g_s1_2019),
+         g_s2_2019 = ifelse(is.na(g_s2_2019), 0, g_s2_2019))
 
 
 df_eif <-  work_wide %>%
-  select(split,
-         paste("exposure_", 2013:2019, sep =""),
-         paste("genhlth_bin_", 2013:2019, sep = "")) %>%
+  # select(split,
+  #        paste("exposure_", 2013:2019, sep =""),
+  #        paste("genhlth_bin_", 2013:2019, sep = "")) %>%
   mutate(
     # Q-functions for end year = 2020
      # Q_2020_2020_t = ifelse(split == 1, Q_fns[[1]][[1]][[1]], Q_fns[[1]][[1]][[2]]),
@@ -665,11 +634,11 @@ df_eif <-  work_wide %>%
      Q_2014_2013_min_t = ifelse(split == 1, Q_min_fns[[6]][[2]][[1]], Q_min_fns[[6]][[2]][[2]]),
      # G-functions
      # g2020 = ifelse(split == 1, g_fns[[1]][[1]], g_fns[[1]][[2]]),
-     g2019 = ifelse(split == 1, g_fns[[1]][[1]], g_fns[[1]][[2]]),
-     g2018 = ifelse(split == 1, g_fns[[2]][[1]], g_fns[[2]][[2]]),
+     g2019 = ifelse(split == 1, g_s1_2019, g_s2_2019),
+     g2018 = ifelse(split == 1, g_s1_2018, g_s2_2018),
      g2017 = 1,
-     g2016 = ifelse(split == 1, g_fns[[3]][[1]], g_fns[[3]][[2]]),
-     g2015 = ifelse(split == 1, g_fns[[4]][[1]], g_fns[[4]][[2]]),
+     g2016 = ifelse(split == 1, g_s1_2016, g_s2_2016),
+     g2015 = ifelse(split == 1, g_s1_2015, g_s2_2015),
      g2014 = 1
          )
 
