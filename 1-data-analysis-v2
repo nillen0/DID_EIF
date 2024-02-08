@@ -237,8 +237,7 @@ write.table(table(temp$exposure, temp$year),
 # (3) 2017 -> 2018,
 # (4) 2018 -> 2019
 
-pdf("figures/self_rated_health.pdf",
-    paste("figures/self_rated_health_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
+pdf(paste("figures/self_rated_health_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 14)
 work %>%
   group_by(exposure, year) %>% 
   summarise(health = mean(genhlth_bin),
@@ -290,8 +289,8 @@ work_wide <- work_wide %>% ungroup(state)
 # Define Learners
 #------------------
 
-learners_q <- c("SL.mean", "SL.glmnet", "SL.ranger", "SL.earth")
-learners_g <- c("SL.mean", "SL.ranger", "SL.glmnet", "SL.glm")
+learners_q <- c("SL.mean", "SL.ranger", "SL.earth")
+learners_g <- c("SL.mean", "SL.ranger",  "SL.glmnet")
 
 #-----------------------
 # Train/Evaluation Split
@@ -648,8 +647,6 @@ df_eif <- df_eif %>% calc_if()
 
 res <- df_eif %>% summarise(across(psi2014:psi2019, list(est=mean, var=~var(.)/n()))) %>% 
   data.frame
-
-table(temp$exposure, temp$year)
 
 #------------------------------------------------------------------------------#
 # Section 2. Plot Outcomes
