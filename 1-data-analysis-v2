@@ -223,6 +223,24 @@ work %>%
   scale_x_continuous(breaks = 2013:2019)
 dev.off()
 
+# Plot of State Minimum Wage over time, NY highlighted, STEP
+pdf(paste("figures/state_minimum_wage_step_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),
+    width = 7, height = 7)
+work %>% 
+  ggplot(aes(x = year, y = state_mw, color = state_abv,
+             group = state_abv)) + 
+  geom_step(lwd = 3) +
+  gghighlight(state == 36, unhighlighted_params = list(colour = NULL, linewidth = 1, alpha = 0.2)) +
+  geom_line(lwd = 0) +
+  gghighlight(state == 36, unhighlighted_params = list(colour = NULL, linewidth = 0, alpha = 0.5),
+              label_params = list(nudge_x = -0.2)) +
+  ylab("Minimum Wage") +
+  xlab("Year") +
+  theme_classic() +
+  scale_x_continuous(breaks = 2013:2020) +
+  guides(colour="none")
+dev.off()
+
 # Table, Binarized Exposure (consistent vs. non-consistent over time)
 temp <- work %>% 
   group_by(state, year) %>% 
