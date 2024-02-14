@@ -39,6 +39,7 @@ library(tidyverse)
 library(tidycensus)
 library(readxl)
 library(gghighlight)
+library(pammtools)
 
 
 # Required Functions:
@@ -289,8 +290,14 @@ work_wide <- work_wide %>% ungroup(state)
 # Define Learners
 #------------------
 
-learners_q <- c("SL.mean", "SL.ranger", "SL.earth")
-learners_g <- c("SL.mean", "SL.ranger",  "SL.glmnet")
+learners_q <- list("SL.mean",
+                   "SL.ranger",
+                   "SL.earth",
+                   c("SL.ranger", "screen.corP"),
+                   c("SL.earth", "screen.corP"))
+learners_g <- list("SL.mean",
+                   c("SL.ranger", "screen.corP"),
+                   c("SL.ranger", "screen.corP"))
 
 #-----------------------
 # Train/Evaluation Split
@@ -465,11 +472,39 @@ for(i in 1:6) {
 # Years where exposure changes occur (all other years have probability of 1)
 year_set <- c(2019, 2018, 2016, 2015)
 
+# g_fns <- list()
+# for(i in 1:7) {
+#   
+#   print(i)
+#   for(i in 1:4) {
+#     
+#     year <- year_set[i]
+#     
+#     outcome <- work_wide[, paste("exposure_", year, sep = "")] %>% unlist
+#     
+#     
+#     g_fns[[i]] =  map(1:num_splits, function(s) sl(df = work_wide,
+#                                                    y = outcome,
+#                                                    s=s,
+#                                                    v = 1,
+#                                                    learners = learners_g,
+#                                                    paste("exposure_", 2013:(year-1), sep = ""),
+#                                                    paste("pop_", 2013:(year-1), sep = ""),
+#                                                    paste("tanf_", 2013:(year-1), sep = ""),
+#                                                    paste("fs_", 2013:(year-1), sep = ""),
+#                                                    paste("eitc_", 2013:(year-1), sep = ""),
+#                                                    paste("uer_", 2013:(year-1), sep = ""),
+#                                                    paste("percap_inc_", 2013:(year-1), sep = "")))
+#     
+#   }
+# 
+# }
+
 # Assume same g-model at all time points based on previous year data
 # Format data for this analysis, go long!
 work$split <- rep(work_wide$split, each = 7)
-test <- work %>% 
-  group_by(state) %>% 
+test <- work %>%
+  group_by(state) %>%
   mutate(exposure_prev = lag(exposure, 1),
          pop_prev = lag(pop, 1),
          tanf_prev = lag(tanf, 1),
@@ -483,10 +518,10 @@ test <- work %>%
          educag4_prev = lag(educag4, 1),
          race2_prev = lag(race2, 1),
          race3_prev = lag(race3, 1),
-         age64ge_prev = lag(age64ge, 1)) %>% 
-  filter(year %in% year_set) %>% 
-  filter(exposure_prev == 1) %>% 
-  arrange(year) %>% 
+         age64ge_prev = lag(age64ge, 1)) %>%
+  filter(year %in% year_set) %>%
+  filter(exposure_prev == 1) %>%
+  arrange(year) %>%
   ungroup(state)
 
 vars <- c(
@@ -507,24 +542,24 @@ vars <- c(
 
 
 g_fns <- map(1:num_splits, function(s) {
-  
+
   SuperLearner(Y = test %>% filter(split == s) %>% select(exposure) %>% unlist,
-               X = test %>% 
-                 filter(split == s) %>% 
+               X = test %>%
+                 filter(split == s) %>%
                  select(all_of(vars)),
                family = binomial,
                SL.library = learners_g,
                newX = test %>% select(all_of(vars)))$SL.predict
-  
+
 })
 
 test$g_s1 <- g_fns[[1]][,1]
 test$g_s2 <- g_fns[[2]][,1]
 
-test <- test %>% 
-  select(state, year, g_s1, g_s2, split) %>% 
+test <- test %>%
+  select(state, year, g_s1, g_s2, split) %>%
   pivot_wider(names_from = year,
-              values_from = g_s1:g_s2) 
+              values_from = g_s1:g_s2)
   
 
 
@@ -675,17 +710,79 @@ plot_res <- res %>%
   rbind(observed)
 
 
-
+pdf(paste("figures/exp_v_obs_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 7)
 plot_res %>% 
   filter(year != 2013) %>% 
   mutate(lwr = est - 1.96*se,
          upr = est + 1.96*se) %>% 
   ggplot(aes(x = year, y = est)) +
-    geom_line(aes(color = label)) +
+    geom_line(aes(color = label), size = 2) +
     geom_ribbon(aes(ymin=lwr,ymax=upr, fill = label), alpha=0.1) +
-    geom_ribbon(aes(ymin=lwr,ymax=upr, color = label), alpha=0.0) +
+    geom_ribbon(aes(ymin=lwr,ymax=upr, color = label), alpha=0.0, size = 0.25) +
   ylab("Proportion with Excellent or Very Good (Self-Rated)") +
   xlab("Year") +
-  labs(lty = "Group") +
-  theme_classic()
-  
+  labs(color = "Group",
+       fill = "Group") +
+  #ylim(0.48, 0.54) +
+  theme_classic() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.title = element_text(size = 18),
+        legend.text = element_text(size = 14))
+dev.off()
+
+
+pdf(paste("figures/exp_v_obs_step_", format(Sys.Date(), "%d%b%Y"), ".pdf", sep =""),width = 14, height = 7)
+plot_res %>% 
+  filter(year != 2013) %>% 
+  mutate(lwr = est - 1.96*se,
+         upr = est + 1.96*se) %>% 
+  ggplot(aes(x = year, y = est)) +
+  geom_step(aes(color = label), size = 2) +
+  geom_stepribbon(aes(ymin=lwr,ymax=upr, fill = label), alpha=0.1) +
+  geom_stepribbon(aes(ymin=lwr,ymax=upr, color = label), alpha=0.0, size = 0.25) +
+  ylab("Proportion with Excellent or Very Good (Self-Rated)") +
+  xlab("Year") +
+  labs(color = "Group",
+       fill = "Group") +
+  #ylim(0.48, 0.54) +
+  theme_classic() +
+  theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.title = element_text(size = 18),
+        legend.text = element_text(size = 14))
+dev.off()
+
+
+## Comparison with Sigaud Results
+
+# Average Minimum wage in 2018
+obs_mw <- work %>% 
+  group_by(year) %>% 
+  summarise(est = mean(mw)) %>% 
+  filter(year != 2019)
+
+NY_mw <- work %>% 
+  group_by(year, state_abv) %>% 
+  summarise(est = mean(mw)) %>% 
+  filter(state_abv == "NY", year != 2019)
+
+(NY_mw$est - obs_mw$est)/obs_mw$est
+
+consistent <- plot_res %>% 
+  filter(label == "Consistent")
+
+obs <- plot_res %>% 
+  filter(label == "Observed", year != 2013)
+
+consistent
+obs
+
+# Improvement in Self-rated Health
+imp <- (consistent$est - obs$est)*100
+
+# Proportional Increase in MW moving from obs to consistent
+prop_inc <- ((NY_mw$est - obs_mw$est)/obs_mw$est)*100
+
+((imp/prop_inc) %>% mean)*10
+((imp/prop_inc)*10) %>% mean
